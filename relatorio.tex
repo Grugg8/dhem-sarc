@@ -1,0 +1,948 @@
+\documentclass[11pt,a4paper]{article}
+
+% --- PACOTES ESSENCIAIS ---
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[portuguese]{babel}
+\usepackage{geometry}
+\geometry{a4paper, top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm}
+
+% --- PACOTES PARA GRÁFICOS E TABELAS (kableExtra e imagens) ---
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{float}
+\usepackage{colortbl}
+\usepackage{xcolor}
+\usepackage{textcomp}
+\usepackage{threeparttable}
+\usepackage[normalem]{ulem}
+\usepackage{makecell}
+
+% --- TIPOGRAFIA E FORMATAÇÃO ---
+\usepackage{mathpazo}
+\usepackage{setspace}
+\usepackage{indentfirst}
+\usepackage{etoolbox}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{
+  pdftitle = {Relatório Final (DHEM e Sarcopenia)},
+  pdfauthor = {Lucas Batista de Oliveira}
+}
+\emergencystretch=3em
+
+% Compatibilidade com longtable v4.24 (evita cola com retração infinita
+% durante a divisão de tabelas entre páginas). Falhas não interrompem a compilação.
+\makeatletter
+\patchcmd{\LT@output}
+{\copy\LT@foot\vss}
+{\copy\LT@foot\vskip 0pt plus 1fil minus \maxdimen}
+{\typeout{Longtable patch 1 ok}}{\typeout{Longtable patch 1 falhou}}
+\patchcmd{\LT@output}
+{\copy\LT@foot\vss}
+{\copy\LT@foot\vskip 0pt plus 1fil minus \maxdimen}
+{\typeout{Longtable patch 2 ok}}{\typeout{Longtable patch 2 falhou}}
+\makeatother
+
+% --- MACROS DINÂMICAS GERADAS PELO R (outputs/macros.tex) ---
+\input{outputs/macros.tex}
+\input{outputs/macros_analises.tex}
+
+\begin{document}
+\setstretch{1.15}
+
+% ==============================================================================
+% CABEÇALHO
+% ==============================================================================
+\begin{flushright}
+  {\LARGE\bfseries Relatório Final}\\[0.4em]
+  {\large Associação entre DHEM e Sarcopenia}\\[0.8em]
+  {\normalsize Consultor: Lucas Batista de Oliveira}\\
+  {\normalsize Requisitante: Jordanna de Paula Mendes Torres}\\
+  {\normalsize Data de atualização: \today}
+\end{flushright}
+
+\vspace{0.6cm}
+\begin{center}
+  \textbf{Material desenvolvido para fins avaliativos na disciplina Prática
+  Estatística III (GET00109).}
+\end{center}
+
+\vspace{0.6cm}
+\tableofcontents
+\vspace{0.6cm}
+\hrule
+\vspace{0.8cm}
+
+% ==============================================================================
+\section{Resumo do Projeto}
+% ==============================================================================
+
+Este relatório apresenta os resultados da consultoria estatística para o
+projeto \textit{Disfunções Endócrinas em Pacientes com DHEM (Sub-projeto:
+Sarcopenia)}, conduzido com dados reais do Ambulatório de Endocrinologia do
+HUAP/UFF. O objetivo central é investigar a associação entre a doença hepática
+esteatótica associada à disfunção metabólica (DHEM) e à sarcopenia, com ênfase
+na ocorrência de degeneração muscular em pacientes com fibrose hepática.
+
+A amostra analisada contou com \NTotal{} pacientes, com idade média de
+\MediaIdade{} anos (mediana de \MedianaIdade{} anos) e IMC médio de \MediaIMC{}
+kg/m$^2$ (DP = \DPIMC{}). Do total, \PercMulheres{} são do sexo feminino,
+\PercDHEM{} apresentaram diagnóstico de DHEM e \PercFibrose{} apresentaram
+fibrose hepática significativa. As prevalências de sarcopenia variaram conforme
+o critério adotado, entre \PercSarcBaumgartner{} (critério de Baumgartner
+combinado ao handgrip) e \PercSarcVel{} (velocidade de marcha $< 0{,}8$ m/s).
+
+% ==============================================================================
+\section{Contexto e Objetivos}
+% ==============================================================================
+
+\subsection{Contexto clínico}
+
+A DHEM é uma das causas mais frequentes de doença hepática crônica e está
+associada à obesidade, diabetes mellitus tipo 2 e síndrome metabólica. Estudos
+recentes apontam uma relação bidirecional entre a DHEM e a sarcopenia: a perda
+progressiva e generalizada de massa e força muscular esquelética pode agravar o
+acúmulo de gordura hepática, enquanto a doença hepática avançada contribui para
+a degradação muscular por vias metabólicas e inflamatórias compartilhadas.
+
+Neste subprojeto, a sarcopenia é avaliada por múltiplos critérios — testes
+funcionais (SARC-F, SARC-F com circunferência da panturrilha, handgrip, elevação
+da cadeira e velocidade de marcha) e ajustes de massa magra apendicular (MMEA)
+pelos métodos de Newman, Baumgartner, FNIH e razão MMEA/peso — o que permite
+comparar a frequência de sarcopenia conforme a definição empregada.
+
+\subsection{Objetivos}
+
+\textbf{Objetivo geral:} avaliar a frequência de sarcopenia em pacientes com
+DHEM e fibrose hepática.
+
+\textbf{Objetivos específicos:}
+\begin{enumerate}
+  \item Determinar a frequência de baixa massa magra utilizando os diferentes
+        ajustes de MMEA nesta população;
+  \item Verificar se há concordância entre os diferentes ajustes de MMEA nos
+        participantes com DHEM;
+  \item Avaliar se pacientes com fibrose apresentam pior massa magra em relação
+        aos sem fibrose;
+  \item Avaliar se pacientes com DHEM diferem dos sem DHEM;
+  \item Avaliar se pacientes sem DHEM, com DHEM sem fibrose, e com DHEM e
+        fibrose diferem entre si.
+\end{enumerate}
+
+% ==============================================================================
+\section{Materiais e Métodos}
+\label{sec:metodos}
+% ==============================================================================
+
+\subsection{Delineamento e população}
+
+Trata-se de um estudo transversal, observacional, conduzido no Ambulatório de
+Endocrinologia do HUAP, com aprovação do Comitê de Ética em Pesquisa. A base de
+dados contém \NTotal{} pacientes, com informações demográficas (sexo, etnia),
+hábitos (atividade física, tabagismo), comorbidades (obesidade, sobrepeso,
+diabetes, hipertensão), doença hepática (DHEM, esteatose por FLI/Saadeh/CAP e
+fibrose) e composição corporal (gordura e massa magra por DXA/BIA, IMC e
+múltiplos critérios de sarcopenia).
+
+\subsection{Variáveis de estratificação}
+
+Os pacientes foram classificados em três grupos segundo a variável combinada
+\textit{DHEM\_Comb}: sem DHEM (\NSemDHEM{} pacientes), DHEM sem fibrose
+(\NDHEMSemFibrose{}) e DHEM com fibrose (\NDHEMComFibrose{}). Fibrose hepática
+significativa foi definida por rigidez hepática $\geq 8$ kPa na elastografia ou
+ponto de corte equivalente (SW $> 8$, point $> 1{,}2$).
+
+\subsection{Análise estatística}
+
+Variáveis numéricas foram resumidas por média e desvio padrão (DP), mediana
+(primeiro e terceiro quartis, Q1;Q3) e amplitude, com verificação da
+normalidade pelo
+teste de Shapiro--Wilk. Variáveis categóricas foram resumidas por frequências
+absolutas e relativas, calculadas sobre os dados observados. A análise bivariada
+consistiu na estratificação das características segundo os três grupos
+DHEM/fibrose, complementada por gráficos adequados: histogramas com boxplot
+(numéricas), gráficos de barras (categóricas), barras agrupadas e boxplots
+(cruzamentos) e diagrama de dispersão e matriz de correlação (relações entre
+numéricas).
+
+Para o objetivo 1, as prevalências de baixa massa magra foram estimadas com
+intervalo de confiança (IC) de 95\% pelo método de Wilson. Para o objetivo 2, a
+concordância entre os quatro ajustes de MMEA foi avaliada dois a dois por:
+(i) teste de médias pareado (t pareado ou Wilcoxon, conforme a normalidade das
+diferenças); (ii) teste de correlação maior que zero (Pearson ou Spearman);
+(iii) regressão linear sem intercepto ($Y = bX$) com teste de $b = 1$; e
+(iv) diagramas de Bland-Altman, complementados pelos coeficientes Kappa de
+Cohen (pares) e de Fleiss (global). A correlação foi avaliada por Pearson quando
+ambas as variáveis eram normais e por Spearman caso contrário. Para os objetivos
+3 e 4, foram construídas
+tabelas de triagem cruzando cada variável-resposta com as variáveis candidatas
+(demográficas, comorbidades, composição corporal e critérios de sarcopenia),
+com testes $t$/Mann--Whitney (numéricas) e qui-quadrado/Fisher (categóricas);
+as variáveis com $p < 0{,}20$ na triagem foram levadas adiante e, para cada uma,
+ajustou-se previamente um modelo logístico simples, do qual
+foram extraídas a razão de chances (OR) e seu IC de 95\% (método de Wald). Em
+seguida, ajustou-se um modelo logístico múltiplo com todas as variáveis
+triadas, seguido de seleção stepwise (direção \textit{both}, critério AIC), com
+OR e IC de 95\%. O ajuste dos modelos finais foi avaliado por procedimentos de
+diagnóstico: calibração pelo teste de Hosmer--Lemeshow; poder discriminatório
+pela área sob a curva ROC (AUC) com IC de 95\% (método de DeLong); ausência de
+multicolinearidade via fator de inflação da variância (VIF/GVIF); análise de
+resíduos de Pearson e Deviance; e detecção de observações influentes pela
+distância de Cook. Para o objetivo 5, os três grupos foram comparados
+com ANOVA/Kruskal--Wallis (numéricas) e qui-quadrado/Fisher (categóricas).
+Todas as análises foram realizadas em R 4.6.1, com semente fixa para
+reprodutibilidade sempre que necessário.
+
+% ==============================================================================
+\section{Resultados}
+\label{sec:resultados}
+% ==============================================================================
+
+\subsection{Análise Descritiva Univariada}
+
+\subsubsection{Variáveis numéricas}
+
+A idade dos participantes variou de 29 a 81 anos (média de \MediaIdade{} anos;
+mediana de \MedianaIdade{} anos). O IMC médio foi de \MediaIMC{} kg/m$^2$
+(DP = \DPIMC{}), com mediana de 31,5 kg/m$^2$ e valores entre 19,4 e 57,0
+kg/m$^2$, indicando predomínio de excesso de peso na amostra. A gordura corporal
+média foi de 42,7\% (DP = 8,5) e a massa magra total média de 44,8 kg
+(DP = 9,3; mediana de 42,9 kg). Entre os ajustes de massa magra apendicular, a
+razão MMEA/peso apresentou média de 24,6 (DP = 4,5) e a razão MMEA/IMC média de
+0,6 (DP = 0,2).
+
+O teste de Shapiro--Wilk indicou desvio da normalidade para quase todas as
+variáveis numéricas ($p < 0{,}05$), com exceção da razão MMEA/altura$^2$
+($p = 0{,}509$). Por isso, além de média (DP), reportamos mediana (Q1;Q3), que são
+mais robustas à assimetria (Tabela~\ref{tab:desc_numericas} e
+Figura~\ref{fig:painel_numericas}).
+
+\begin{table}[H]
+  \centering
+  \caption{Estatísticas descritivas das variáveis numéricas ($n = 165$).}
+  \label{tab:desc_numericas}
+  \input{outputs/tabela_descritiva_numericas.tex}
+
+  \footnotesize
+  Nota: DP = desvio padrão; Q1 = primeiro quartil; Q3 = terceiro quartil;
+  SW = Shapiro--Wilk. O valor-p do teste de Shapiro--Wilk aparece em negrito
+  quando $p < 0{,}05$.
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/painel_numericas_principais.pdf}
+  \caption{Distribuições de idade, IMC, gordura corporal e massa magra total
+           (histograma com boxplot).}
+  \label{fig:painel_numericas}
+\end{figure}
+
+\subsubsection{Variáveis categóricas}
+
+A amostra foi majoritariamente feminina (\PercMulheres{}) e com predominância de
+etnia branca (37,6\%), parda (32,1\%) e preta (29,7\%). O sedentarismo atingiu
+67,3\% dos pacientes; 67,9\% nunca fumaram e apenas 6,7\% eram fumantes atuais.
+Quanto às comorbidades, \PercObesidade{} apresentavam obesidade (IMC $\geq 30$
+kg/m$^2$), \PercDiabetes{} diabetes e \PercHipertensao{} hipertensão arterial.
+
+Em relação à doença hepática, \PercDHEM{} da amostra apresentou DHEM e
+\PercFibrose{} fibrose hepática significativa. Pela variável combinada, 13,3\%
+dos pacientes não têm DHEM, 61,2\% têm DHEM sem fibrose e 25,5\% têm DHEM com
+fibrose.
+
+A frequência de sarcopenia variou substancialmente conforme o critério: entre os
+testes funcionais, SARC-F $\geq 4$ identificou \PercSarcSARCF{} dos avaliados,
+SARC-F com panturrilha $\geq 11$ identificou \PercSarcSARCFCC{}, handgrip
+\PercSarcHandgrip{}, elevação da cadeira \PercSarcElev{} e velocidade de marcha
+\PercSarcVel{}. Entre os ajustes de massa magra, a frequência de baixa MMEA foi
+de \PercIMMANewman{} (Newman), \PercIMMABaumgartner{} (Baumgartner),
+\PercIMMAFNIH{} (FNIH) e \PercIMMAPeso{} (razão MMEA/peso); quando combinados ao
+handgrip, as prevalências de sarcopenia foram \PercSarcNewman{},
+\PercSarcBaumgartner{} e \PercSarcFNIH{}.
+
+A Tabela~\ref{tab:categoricas} apresenta as frequências completas de todas as
+variáveis categóricas, e a Figura~\ref{fig:painel_categoricas} ilustra as
+principais.
+
+\input{outputs/tabela_descritiva_categoricas.tex}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/painel_categoricas_principais.pdf}
+  \caption{Distribuição de sexo, grupo DHEM/fibrose e sarcopenia pelos critérios
+           de handgrip e SARC-F (frequências absolutas e relativas).}
+  \label{fig:painel_categoricas}
+\end{figure}
+
+\subsection{Análise Descritiva Bivariada}
+
+\subsubsection{Caracterização segundo o grupo DHEM/fibrose}
+
+A Tabela~\ref{tab:cruzamento} resume as características da amostra segundo os
+grupos sem DHEM ($n = \NSemDHEM$), DHEM sem fibrose ($n = \NDHEMSemFibrose$) e
+DHEM com fibrose ($n = \NDHEMComFibrose$).
+
+Observa-se um gradiente crescente de obesidade e adiposidade com a gravidade da
+doença hepática: a obesidade passou de 40,9\% (sem DHEM) para 61,4\% (DHEM sem
+fibrose) e 76,2\% (DHEM com fibrose); o IMC médio passou de 29,2 para 32,1 e
+34,0 kg/m$^2$, e a gordura corporal de 38,9\% para 42,4\% e 45,2\%. A massa
+magra total, por sua vez, foi semelhante entre os grupos (43,0, 45,0 e 45,1 kg),
+bem como a idade (62,0, 58,0 e 60,5 anos). As razões de massa magra ajustadas
+pelo peso (MMEA/peso: 26,5, 24,7 e 23,2) e pelo IMC (MMEA/IMC: 0,7, 0,6 e 0,6)
+apresentaram valores decrescentes com a gravidade, sugerindo menor massa magra
+relativa nos grupos mais graves.
+
+\input{outputs/tabela_cruzamento_DHEM.tex}
+
+\begin{center}
+  \footnotesize
+  Nota: valores expressos em $n$ (\%); percentuais calculados sobre os dados
+  observados. Para variáveis com dados ausentes, o número de ausentes consta na
+  Tabela~\ref{tab:categoricas}. A variável DHEM define parcialmente os grupos de
+  estratificação e deve ser interpretada com cautela.
+\end{center}
+
+\subsubsection{Sarcopenia e grupos DHEM/fibrose}
+
+Os critérios funcionais de sarcopenia apresentaram padrões distintos entre os
+grupos (Figura~\ref{fig:sarc_func}). A elevação da cadeira foi o teste com
+gradiente mais evidente: 31,6\% de alterados no grupo sem DHEM, 45,0\% no grupo
+com DHEM sem fibrose e 62,9\% no grupo com DHEM e fibrose. Padrão semelhante foi
+observado no SARC-F (15,0\%, 25,8\% e 36,6\%) e na velocidade de marcha (57,9\%,
+81,6\% e 80,6\%). Já o handgrip e o SARC-F com panturrilha não mostraram
+gradiente claro (prevalências entre 24\% e 32\% nos três grupos).
+
+Entre os critérios baseados em massa magra (Figura~\ref{fig:sarc_massa}), a
+prevalência de sarcopenia combinada (IMMA + handgrip) foi de 18,2\% (Newman),
+0,0\% (Baumgartner) e 4,5\% (FNIH) no grupo sem DHEM; 12,9\%, 4,0\% e 7,9\% no
+grupo DHEM sem fibrose; e 11,9\%, 0,0\% e 9,5\% no grupo com DHEM e fibrose —
+sem um gradiente consistente de maior sarcopenia com a fibrose por esses
+critérios.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/cruzamento_sarcopenia_funcional_DHEMComb.pdf}
+  \caption{Prevalência de sarcopenia pelos critérios funcionais segundo o grupo
+           DHEM/fibrose.}
+  \label{fig:sarc_func}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/cruzamento_sarcopenia_massa_DHEMComb.pdf}
+  \caption{Prevalência de sarcopenia pelos critérios de massa magra (IMMA
+           ajustado + handgrip) segundo o grupo DHEM/fibrose.}
+  \label{fig:sarc_massa}
+\end{figure}
+
+\subsubsection{Composição corporal e variáveis contínuas}
+
+A Figura~\ref{fig:box_grupos} compara massa magra total e IMC entre os grupos.
+Apesar da massa magra absoluta semelhante, o IMC e a gordura corporal
+aumentaram com a gravidade da doença hepática, consistente com o gradiente de
+obesidade descrito anteriormente.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/painel_boxplots_DHEMComb.pdf}
+  \caption{Distribuição de massa magra total e IMC segundo o grupo DHEM/fibrose.}
+  \label{fig:box_grupos}
+\end{figure}
+
+\subsubsection{Relações entre variáveis numéricas}
+\label{sec:relacoes}
+
+A matriz de correlação de Pearson (Figura~\ref{fig:correlacao}) resume as
+relações lineares entre as variáveis numéricas. Destacam-se a forte correlação
+entre massa magra total e ALM/MMEA ($r = 0{,}93$), as correlações moderadas
+entre gordura corporal e IMC ($r = 0{,}68$) e entre massa magra e IMC
+($r = 0{,}40$), e as correlações negativas entre idade e massa magra
+($r = -0{,}37$) e entre as razões MMEA/IMC e MMEA/peso e o IMC ($r = -0{,}31$ e
+$-0{,}40$, respectivamente).
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/correlacao_numericas.pdf}
+  \caption{Matriz de correlação de Pearson entre as variáveis numéricas.}
+  \label{fig:correlacao}
+\end{figure}
+
+% ==============================================================================
+\subsection{Objetivo 1: prevalência de baixa massa magra}
+\label{sec:obj1}
+% ==============================================================================
+
+A Tabela~\ref{tab:prevalencia_ic} e a Figura~\ref{fig:prevalencia} apresentam a
+frequência de baixa massa magra em cada critério, com IC de 95\% (método de
+Wilson). A prevalência variou de 7,3\% (Baumgartner) a 44,8\% (Newman):
+\PercIMMABaixo{} para o critério bruto MMEA $< 15/20$ kg
+(IC 95\%: \ICIMMABaixoInf{}--\ICIMMABaixoSup{}), \PercIMMANewman{} para Newman
+(IC 95\%: \ICIMMANewmanInf{}--\ICIMMANewmanSup{}), \PercIMMABaumgartner{} para
+Baumgartner (IC 95\%: \ICIMMABaumgartnerInf{}--\ICIMMABaumgartnerSup{}),
+\PercIMMAFNIH{} para FNIH (IC 95\%: \ICIMMAFNIHInf{}--\ICIMMAFNIHSup{}) e
+\PercIMMAPeso{} para a razão MMEA/peso
+(IC 95\%: \ICIMMAPesoInf{}--\ICIMMAPesoSup{}).
+
+Para interpretar os intervalos, tomando o critério de Newman como exemplo,
+estima-se que 44,8\% dos pacientes tenham baixa massa magra; se o estudo fosse
+repetido muitas vezes na mesma população, em 95 de cada 100 repetições o
+intervalo entre \ICIMMANewmanInf{} e \ICIMMANewmanSup{} conteria a verdadeira
+prevalência. Na prática, a prevalência provável está entre aproximadamente
+\ICIMMANewmanInf{} e \ICIMMANewmanSup{}. O mesmo raciocínio vale para os demais
+critérios, e quanto mais estreito o intervalo, mais precisa a estimativa.
+
+\begin{table}[H]
+  \centering
+  \caption{Prevalência de baixa massa magra segundo os critérios de MMEA, com
+           intervalo de confiança de 95\% (método de Wilson).}
+  \label{tab:prevalencia_ic}
+  \input{outputs/tabela_prevalencia_IC.tex}
+
+  \footnotesize
+  Nota: percentuais calculados sobre os dados observados (n = 165 para todos os
+  critérios).
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.85\textwidth]{outputs/figura_prevalencia_IC.pdf}
+  \caption{Prevalência de baixa massa magra por critério, com IC de 95\%
+           (barras de erro).}
+  \label{fig:prevalencia}
+\end{figure}
+
+% ==============================================================================
+\subsection{Objetivo 2: concordância entre os ajustes de MMEA}
+\label{sec:obj2}
+% ==============================================================================
+
+A Tabela~\ref{tab:concordancia} resume a concordância entre os seis pares de
+ajustes. Em todos os pares houve diferença estatisticamente significativa entre
+as médias ($p < 0{,}001$; t pareado ou Wilcoxon). As correlações foram
+moderadas a altas e todas significativas (Spearman, $r$ entre 0,36 e 0,86;
+$p < 0{,}001$), indicando associação linear entre os métodos, mas associação
+não implica concordância.
+Optou-se pela correlação de Spearman porque as variáveis não seguem distribuição
+normal (teste de Shapiro--Wilk); na matriz de correlação
+(Figura~\ref{fig:correlacao}, Seção~\ref{sec:relacoes}), o coeficiente de
+Pearson foi usado como medida descritiva padrão de associação linear.
+
+A análise foi conduzida na amostra global ($n = \NTotal{}$) e validada na
+subamostra com DHEM ($n = \NDHEMConcord{}$), recorte solicitado no objetivo 2;
+o padrão de concordância foi idêntico (Kappa global de \KappaFleiss{} na amostra
+global e \KappaFleissDHEM{} na subamostra com DHEM).
+
+É importante notar que os ajustes comparados possuem escalas numéricas distintas
+por construção: Newman expressa um resíduo de regressão linear em relação à
+gordura corporal (centrado em 0), Baumgartner é um índice de massa corporal
+apendicular (kg/m$^2$), FNIH é uma razão adimensional (MMEA/IMC) e MMEA/peso é
+uma razão percentual. Assim, as diferenças sistemáticas de médias e as
+inclinações $b \neq 1$ refletem primariamente a incompatibilidade de unidades
+entre as equações, e não necessariamente discordância clínica intrínseca entre
+os métodos. A métrica diagnóstica primária e clinicamente relevante é,
+portanto, a concordância sobre as classificações dicotômicas, resumida pelos
+coeficientes Kappa de Cohen e de Fleiss (Kappa global de \KappaFleiss{},
+concordância fraca).
+
+Na regressão sem intercepto ($Y = bX$), a hipótese $b = 1$ foi rejeitada em
+cinco dos seis pares ($p < 0{,}001$). No único par em que não foi rejeitada
+(Newman vs MMEA/peso, $p = 0{,}161$), a estimativa ($b = 0{,}26$) está distante
+de 1 e o erro padrão é grande; não há evidência de concordância, apenas falta
+de precisão. Os diagramas de Bland-Altman
+(Figura~\ref{fig:bland_altman}) mostram vieses sistemáticos em todos os pares,
+com limites de concordância largos, e a dispersão dos pares
+(Figura~\ref{fig:conc_scatter}) evidencia retas ajustadas distantes da reta de
+identidade.
+
+Cabe um esclarecimento metodológico sobre a Figura~\ref{fig:conc_scatter} e os
+pares que envolvem o método de Newman: o descolamento da reta ajustada $Y = bX$
+em relação à nuvem de pontos decorre do fato de o resíduo de Newman ser centrado
+em zero, enquanto as demais métricas (Baumgartner e MMEA/peso) operam em
+escalas estritamente positivas. Ao forçar a reta pela origem $(0,0)$, a
+regressão sem intercepto não representa adequadamente a relação contínua entre
+os métodos; por isso, a avaliação de concordância diagnóstica deve se basear
+nos coeficientes Kappa das classificações dicotômicas.
+
+Os Kappas de Cohen variaram de 0,09 (Baumgartner vs MMEA/peso) a 0,48
+(FNIH vs MMEA/peso), concordância fraca a moderada, e o Kappa de Fleiss
+global entre os quatro critérios foi \KappaFleiss{} (concordância fraca).
+
+\textbf{Conclusão prática:} os quatro ajustes de MMEA não são intercambiáveis.
+A avaliação diagnóstica dos modelos lineares sem intercepto ($Y = bX$)
+(detalhada no Apêndice~\ref{sec:apendice_concordancia}) revelou violações
+severas dos pressupostos (rejeição do intercepto nulo, não normalidade e
+heterocedasticidade residual). Portanto, \textbf{desaconselha-se o uso do
+coeficiente $\hat{b}$ como fator de conversão matemática} entre os métodos,
+devendo a avaliação de concordância restringir-se às classificações
+dicotômicas (coeficientes Kappa).
+
+\begin{table}[H]
+  \centering
+  \caption{Concordância entre os ajustes de MMEA (dois a dois).}
+  \label{tab:concordancia}
+  \input{outputs/tabela_concordancia_ajustes.tex}
+
+  \footnotesize
+  Nota: teste de médias pareado (t pareado se as diferenças são normais, senão
+  Wilcoxon); correlação de Spearman (variáveis não normais) testada como $> 0$;
+  regressão sem intercepto
+  $Y = bX$ com teste de $b = 1$; Kappa de Cohen sobre as versões dicotômicas;
+  limites de Bland-Altman (média $\pm 1{,}96$ DP das diferenças).
+\end{table}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/figura_bland_altman_ajustes.pdf}
+  \caption{Diagramas de Bland-Altman para os seis pares de ajustes de MMEA
+           (linha tracejada: viés; linhas pontilhadas: limites de concordância).}
+  \label{fig:bland_altman}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/figura_concordancia_scatter.pdf}
+  \caption{Dispersão dos pares de ajustes com a reta de identidade (tracejada)
+           e a reta ajustada $Y = bX$ (vermelha).}
+  \label{fig:conc_scatter}
+\end{figure}
+
+% ==============================================================================
+\subsection{Objetivo 3: diferenças entre pacientes com e sem fibrose hepática}
+\label{sec:obj3}
+% ==============================================================================
+
+A Tabela~\ref{tab:triagem_fibrose} apresenta a triagem das variáveis candidatas
+para o desfecho fibrose, com $p < 0{,}20$ como critério de seleção. Foram
+selecionadas oito variáveis: sexo, etnia, atividade física, obesidade, IMC,
+gordura corporal (\%) e os testes funcionais de sarcopenia SARC-F $\geq 4$ e
+elevação da cadeira $> 15$ s.
+
+\input{outputs/tabela_triagem_fibrose.tex}
+
+Para cada uma dessas covariáveis selecionadas, ajustou-se previamente um modelo
+logístico simples; as razões de chances (OR) não ajustadas e seus IC 95\% são
+resumidos na Tabela~\ref{tab:modelo_simples_fibrose}. Os termos em negrito
+indicam as variáveis retidas no modelo múltiplo pela seleção stepwise.
+
+\begin{table}[H]
+  \centering
+  \caption{Modelos logísticos simples para fibrose hepática.}
+  \label{tab:modelo_simples_fibrose}
+  \input{outputs/tabela_modelo_simples_fibrose.tex}
+\end{table}
+
+Em seguida, ajustou-se o modelo logístico múltiplo com todas as variáveis
+triadas, submetido à seleção stepwise (direção \textit{both}, critério AIC);
+o modelo final para fibrose
+(Tabela~\ref{tab:modelo_fibrose}; $n = 134$) reteve etnia, IMC e a alteração no
+teste de elevação da cadeira.
+Pacientes de etnia preta apresentaram menor chance de fibrose em relação aos
+brancos (OR = 0,24; IC 95\%: 0,08--0,66; $p = 0{,}008$); para pardos, a diferença
+não foi significativa (OR = 0,42; IC 95\%: 0,15--1,10; $p = 0{,}086$); cada
+aumento de 1 kg/m$^2$ no IMC associou-se a um aumento estimado de 5\% na chance
+de fibrose, sem significância estatística (OR = 1,05; IC 95\%: 0,99--1,13;
+$p = 0{,}109$); e a alteração no teste de elevação da cadeira mais que dobrou a
+chance de fibrose, também sem significância estatística (OR = 2,11;
+IC 95\%: 0,93--4,95; $p = 0{,}078$).
+
+Em relação à pergunta central do objetivo, a hipótese nula de ausência de
+diferença não foi rejeitada para a quantidade de massa muscular: a massa magra
+total foi de 45,1 kg (DP = 9,0) nos pacientes com fibrose e 44,7 kg (DP = 9,4)
+nos sem fibrose ($p = 0{,}585$), e o ALM/MMEA foi de 19,8 kg (DP = 4,8) contra
+20,0 kg (DP = 5,4) ($p = 0{,}891$). Após controlar pelos confundidores clássicos
+(sexo, idade e IMC) em um modelo de regressão logística múltiplo, a fibrose
+permaneceu sem associação estatisticamente significativa com a massa magra
+total ($\beta \approx \BetaFibroseMMT{}$ kg; $p = \PBetaFibroseMMT{}$).
+
+O impacto muscular associado à fibrose manifestou-se, porém, no desempenho
+funcional: a alteração no teste de elevação da cadeira foi de 62,9\% no grupo
+com fibrose contra 42,4\% no grupo sem fibrose ($p = 0{,}060$). Em conjunto,
+esses resultados indicam que a fibrose hepática está associada a perdas de
+desempenho e força física funcional, e não necessariamente à redução do volume
+bruto de massa magra.
+
+\begin{table}[H]
+  \centering
+  \caption{Modelo de regressão logística múltipla para fibrose hepática.}
+  \label{tab:modelo_fibrose}
+  \input{outputs/tabela_modelo_fibrose.tex}
+
+  \footnotesize
+  Nota: 1 paciente da categoria ``Outras'' (etnia, $n = 1$) foi excluído por
+  ser categoria esparsa. Referência da etnia: branca.
+\end{table}
+
+% ==============================================================================
+\subsection{Objetivo 4: diferenças entre pacientes com e sem DHEM}
+\label{sec:obj4}
+% ==============================================================================
+
+A triagem (Tabela~\ref{tab:triagem_dhem}) selecionou onze variáveis com
+$p < 0{,}20$: etnia, idade, atividade física, obesidade, IMC, gordura corporal
+(\%), gordura corporal (categorizada), massa magra total (kg), MMEA reduzida
+(peso) e os testes funcionais de elevação da cadeira e velocidade de marcha.
+
+\input{outputs/tabela_triagem_dhem.tex}
+
+A Tabela~\ref{tab:modelo_simples_dhem} resume os modelos logísticos simples para
+cada uma dessas covariáveis selecionadas. Nela, observa-se que a MMEA reduzida
+(peso) apresentou estimativas numericamente instáveis (OR extremamente elevado e
+IC 95\% não finito), decorrentes da quase-separação provocada por caselas
+esparsas; por isso, essa variável não foi retida na seleção stepwise e não
+compôs o modelo múltiplo final, e seus resultados não devem ser interpretados
+clinicamente (ver Seção~\ref{sec:discussao}).
+
+\begin{table}[H]
+  \centering
+  \caption{Modelos logísticos simples para DHEM.}
+  \label{tab:modelo_simples_dhem}
+  \input{outputs/tabela_modelo_simples_dhem.tex}
+\end{table}
+
+O modelo final por stepwise (Tabela~\ref{tab:modelo_dhem}; $n = 124$) reteve
+idade, atividade física, gordura corporal (\%) e velocidade de marcha alterada.
+Cada ano adicional de idade associou-se a menor chance de DHEM (OR = 0,94;
+IC 95\%: 0,89--0,99; $p = 0{,}032$); a atividade física intensa
+($> 150$ min/sem) reduziu a chance de DHEM em relação ao sedentarismo
+(OR = 0,22; IC 95\%: 0,06--0,75; $p = 0{,}017$); cada ponto percentual adicional
+de gordura corporal aumentou a chance de DHEM em 7\% (OR = 1,07;
+IC 95\%: 1,01--1,14; $p = 0{,}029$); e a velocidade de marcha alterada quase
+triplicou a chance de DHEM (OR = 2,83; IC 95\%: 0,90--8,79; $p = 0{,}070$).
+
+\begin{table}[H]
+  \centering
+  \caption{Modelo de regressão logística múltipla para DHEM.}
+  \label{tab:modelo_dhem}
+  \input{outputs/tabela_modelo_dhem.tex}
+\end{table}
+
+% ==============================================================================
+\subsection{Objetivo 5: comparação dos três grupos (DHEM/fibrose)}
+\label{sec:obj5}
+% ==============================================================================
+
+A Tabela~\ref{tab:testes_grupos} resume os testes de hipóteses para comparação
+dos três grupos. Entre as variáveis numéricas, o IMC (Kruskal--Wallis:
+$H = 9{,}72$; $p = 0{,}008$) e a gordura corporal ($p = 0{,}045$) diferiram
+entre os grupos; idade, massa magra total e ALM/MMEA foram semelhantes. Entre
+as categóricas, a obesidade diferiu
+($\chi^2 = 7{,}78$; $p = 0{,}020$), consistente com o gradiente observado na
+Tabela~\ref{tab:cruzamento}; diabetes, hipertensão e os critérios de sarcopenia
+não diferiram significativamente entre os grupos.
+
+\input{outputs/tabela_comparacao_grupos.tex}
+
+Como pós-teste das comparações significativas
+(Tabela~\ref{tab:posthoc_grupos}), os destaques em negrito marcam as diferenças
+com valor-p ajustado $< 0{,}05$ após a correção de Holm. O IMC diferiu
+principalmente entre os grupos sem DHEM e com DHEM e fibrose (teste de Dunn;
+$z = -3{,}11$; valor-p ajustado = 0{,}006), assim como a gordura corporal
+(valor-p ajustado = 0{,}049) e a obesidade (Fisher; valor-p ajustado = 0{,}021).
+As demais comparações pareadas não foram significativas após a correção de Holm.
+
+\begin{table}[H]
+  \centering
+  \caption{Comparações post-hoc das variáveis com diferença significativa entre
+           os três grupos (correção de Holm).}
+  \label{tab:posthoc_grupos}
+  \input{outputs/tabela_posthoc_grupos.tex}
+\end{table}
+
+% ==============================================================================
+\section{Discussão}
+\label{sec:discussao}
+% ==============================================================================
+
+Os resultados descritivos evidenciam uma população ambulatorial de alto risco
+cardiometabólico: \PercMulheres{} de mulheres, \PercDHEM{} com DHEM, \PercObesidade{} com
+obesidade e \PercDiabetes{} com diabetes tipo 2, além de idade média próxima
+dos 60 anos.
+
+A frequência de baixa massa magra variou de 7,3\% (Baumgartner) a 44,8\%
+(Newman) entre os ajustes de MMEA, e os IC de 95\% evidenciam a incerteza das
+estimativas. A concordância entre os quatro ajustes foi fraca a moderada
+(Kappa de Cohen de 0,09 a 0,48; Kappa de Fleiss global de \KappaFleiss{}), com
+diferenças sistemáticas entre todos os pares; os métodos não são intercambiáveis
+e a escolha do critério influencia fortemente o diagnóstico.
+
+Os diagnósticos dos modelos lineares sem intercepto ($Y = bX$) reforçam a
+incompatibilidade estrutural entre as equações dos ajustes: o intercepto do
+modelo irrestrito foi rejeitado em todos os pares e os resíduos violaram os
+pressupostos de normalidade e homocedasticidade
+(Apêndice~\ref{sec:apendice_concordancia}). Essa incompatibilidade inviabiliza
+fatores multiplicadores simples sem intercepto como ferramentas de conversão
+matemática entre os métodos, de modo que a avaliação de concordância deve
+restringir-se às classificações dicotômicas.
+
+Do ponto de vista bivariado, a piora dos testes funcionais (especialmente
+elevação da cadeira e SARC-F) com a gravidade da doença hepática é consistente
+com a hipótese de associação entre fibrose e degeneração muscular. Por outro
+lado, a massa magra absoluta e os critérios de massa magra ajustada não
+apresentaram gradiente claro entre os grupos, sugerindo que a diferença pode
+estar mais relacionada à função muscular (força e desempenho físico) do que à
+massa em si. Na comparação direta entre pacientes com e sem fibrose, a hipótese
+nula de igualdade não foi rejeitada para a massa magra total ($p = 0{,}585$) e
+para o ALM/MMEA ($p = 0{,}891$), mesmo após o ajuste por sexo, idade e IMC
+($p = \PBetaFibroseMMT{}$), enquanto a alteração no teste de elevação da cadeira foi
+marginalmente mais frequente no grupo com fibrose (62,9\% vs 42,4\%;
+$p = 0{,}060$). Nos testes formais, o IMC, a gordura corporal (\%) e a
+obesidade diferenciaram os três grupos ($p < 0{,}05$), reforçando que a
+gravidade da doença hepática acompanha o perfil de adiposidade, com diferenças
+concentradas entre o grupo sem DHEM e o grupo com DHEM e fibrose
+(Seção~\ref{sec:obj5}).
+
+Com a triagem pelo critério $p < 0{,}20$ e o ajuste prévio de modelos
+logísticos simples para as variáveis selecionadas, os modelos logísticos
+múltiplos finais foram definidos por seleção stepwise (critério AIC). No
+modelo de fibrose ($n = 134$), a seleção stepwise reteve etnia, IMC e a
+alteração no teste de elevação da cadeira; etnia preta foi protetora
+(OR = 0,24) e a alteração nesse teste mais que dobrou a chance de fibrose
+(OR = 2,11), reforçando o papel do desempenho funcional muscular. No modelo de
+DHEM ($n = 124$), foram retidas idade, atividade física intensa (OR = 0,22,
+protetora), gordura corporal (OR = 1,07 por ponto percentual) e velocidade de
+marcha alterada (OR = 2,83), indicando que a adiposidade e o comprometimento
+funcional muscular são os fatores mais fortemente associados à DHEM. Nos
+diagnósticos de ajuste, ambos os modelos apresentaram boa calibração
+(Hosmer--Lemeshow: valor-p de 0,987 para fibrose e 0,509 para DHEM),
+discriminação moderada (AUC de 0,72 e 0,76, respectivamente), VIF baixo e
+nenhum ponto de Cook alarmante (ver Apêndice), o que sustenta a validade das
+estimativas apresentadas.
+
+Um ponto metodológico relevante foi a quase-separação de dados observada na
+variável MMEA reduzida (peso) no modelo logístico simples de DHEM: a escassez
+de eventos em determinadas caselas produziu estimativas numericamente
+instáveis (OR extremamente elevado e IC 95\% não finito). Esse fenômeno decorre
+da pequena amostra e da raridade da combinação dessas categorias neste banco e
+deve ser entendido como uma limitação amostral, e não como uma associação real.
+Por isso, essa variável não foi retida na seleção stepwise e não compôs o
+modelo múltiplo final, e seus resultados
+não devem ser interpretados clinicamente.
+
+Como limitações, destacam-se: o caráter transversal dos dados, impossibilitando
+o estabelecimento de uma relação de causa-efeito; o número de ausentes nos
+testes funcionais (até 39 pacientes no teste de velocidade de marcha), que
+reduz a amostra dos modelos por análise de casos completos (\textit{complete
+cases}); em ambiente clínico, é plausível que o padrão de perda não seja
+estritamente aleatório (MCAR); a categoria ``Outras'' da etnia ($n = 1$),
+excluída das regressões; o tamanho amostral reduzido do grupo sem DHEM
+($n = 22$); e as caselas esparsas que geraram a quase-separação descrita acima.
+
+% ==============================================================================
+\section{Recomendações}
+\label{sec:recomendacoes}
+% ==============================================================================
+
+\begin{enumerate}
+  \item \textbf{Padronização diagnóstica:} diante da concordância fraca entre
+        os critérios (Kappa de Fleiss global de \KappaFleiss{}) e da
+        inadequação dos modelos lineares de conversão entre os ajustes de MMEA
+        (rejeição do intercepto nulo e violação dos pressupostos residuais;
+        ver Apêndice~\ref{sec:apendice_concordancia}), \textbf{rejeita-se o uso
+        de fatores de correção matemática} ($\hat{b}$) para converter valores
+        entre os métodos, priorizando a escolha direta de um critério adequado
+        ao perfil de adiposidade da população. Para populações com alta
+        prevalência de obesidade e sobrepeso, deve-se priorizar ajustes que
+        considerem a adiposidade, como FNIH ou Newman, uma vez que o critério
+        clássico de Baumgartner subestima sistematicamente a prevalência de
+        baixa massa magra nesse perfil clínico.
+  \item \textbf{Integração de testes funcionais ao rastreio:} nos modelos
+        múltiplos finais, a alteração no teste de elevação da cadeira associou-se
+        à fibrose (OR = 2,11) e a velocidade de marcha alterada à DHEM
+        (OR = 2,83). Recomenda-se incorporar testes de desempenho físico e
+        dinamometria à rotina ambulatorial, em conjunto com a avaliação da
+        composição corporal por imagem ou bioimpedância.
+  \item \textbf{Controle do perfil de adiposidade:} a gordura corporal
+        mostrou-se positivamente associada à DHEM (OR = 1,07 por ponto
+        percentual) e a atividade física intensa mostrou-se protetora
+        (OR = 0,22), reforçando intervenções de controle de peso e promoção de
+        atividade física como medidas de prevenção e manejo da doença hepática.
+  \item \textbf{Aperfeiçoamento da base de dados:} a quase-separação observada
+        na variável MMEA reduzida (peso) e o elevado número de ausentes nos
+        testes funcionais apontam para a necessidade de coleta mais completa e
+        de amostras maiores nas categorias de interesse, de modo a estabilizar
+        os modelos e reduzir o risco de estimativas espúrias.
+\end{enumerate}
+
+As conclusões e recomendações finais serão elaboradas em conjunto com a
+cliente.
+
+% ==============================================================================
+\section{Referências}
+% ==============================================================================
+
+\begin{enumerate}
+  \item Buzzetti E, Pinzani M, Tsochatzis EA. The multiple-hit pathogenesis of
+        non-alcoholic fatty liver disease (NAFLD). \textit{Metabolism}.
+        2016;65(8):1038--1048.
+  \item Eslam M, Newsome PN, Sarin SK, et al. A new definition for
+        metabolic dysfunction-associated fatty liver disease: an international
+        expert consensus statement. \textit{J Hepatol}. 2020;73(1):202--209.
+  \item Riazi K, Azhari H, Charette JH, et al. The prevalence and incidence of
+        NAFLD worldwide: a systematic review and meta-analysis.
+        \textit{J Hepatol}. 2022;77(5):1335--1347.
+  \item EASL--EASD--EASO. Clinical Practice Guidelines on the management of
+        metabolic dysfunction-associated steatotic liver disease (MASLD).
+        \textit{J Hepatol}. 2024.
+  \item American Diabetes Association. Standards of Care in Diabetes--2025.
+        \textit{Diabetes Care}. 2025;48(Suppl 1).
+  \item Sociedade Brasileira de Geriatria e Gerontologia (SBGG). \textit{Manual
+        de Recomendações para Diagnóstico e Tratamento da Sarcopenia no
+        Brasil}. 2022.
+  \item Sarcopenia and MASLD: novel insights and the future.
+        \textit{Nat Rev Endocrinol}. 2025. doi:10.1038/s41574-025-01197-7.
+  \item R Core Team. \textit{R: A Language and Environment for Statistical
+        Computing}. Viena, Áustria: R Foundation for Statistical Computing;
+        2026.
+\end{enumerate}
+
+% ==============================================================================
+\section{Apêndice --- Diagnóstico dos Modelos de Regressão Logística}
+% ==============================================================================
+
+Este apêndice reúne os procedimentos de diagnóstico aplicados aos modelos
+logísticos múltiplos finais dos objetivos 3 (fibrose) e 4 (DHEM). Para cada
+modelo foram avaliados a calibração (teste de Hosmer--Lemeshow, com grupo de
+referência reduzido a $g = 5$ quando as contagens esperadas eram baixas), a
+discriminação (curva ROC e AUC com IC 95\% pelo método de DeLong), a
+multicolinearidade (VIF/GVIF), os resíduos de Pearson e Deviance e a influência
+de observações (distância de Cook). A Tabela~\ref{tab:diagnosticos_modelos}
+consolida os principais indicadores de cada modelo.
+
+\begin{table}[H]
+  \centering
+  \caption{Indicadores de diagnóstico dos modelos logísticos múltiplos finais:
+           teste de Hosmer--Lemeshow (HL), AUC-ROC com IC 95\% (DeLong), VIF
+           máximo e máxima distância de Cook.}
+  \label{tab:diagnosticos_modelos}
+  \input{outputs/tabela_diagnosticos_modelos.tex}
+\end{table}
+
+\subsection{Modelo de fibrose hepática}
+
+O modelo final de fibrose apresentou bom ajuste global: o teste de
+Hosmer--Lemeshow não rejeitou a hipótese de calibração adequada
+($X^2 = 0{,}14$; valor-p = 0,987), a discriminação foi moderada (AUC = 0,72;
+IC 95\%: 0,62--0,81), a multicolinearidade foi desprezível (VIF máximo = 1,0) e
+a maior distância de Cook foi 0,069, abaixo do limiar usual, indicando ausência
+de observações influentes. Os resíduos de Pearson e Deviance não evidenciaram
+padrões sistemáticos, corroborando a adequação do modelo.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_calibracao_fibrose.pdf}
+  \caption{Calibração do modelo de fibrose (probabilidades observadas vs.
+           preditas).}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_roc_fibrose.pdf}
+  \caption{Curva ROC do modelo de fibrose hepática.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_residuos_fibrose.pdf}
+  \caption{Resíduos de Pearson e Deviance do modelo de fibrose.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_cook_fibrose.pdf}
+  \caption{Distância de Cook do modelo de fibrose.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_vif_fibrose.pdf}
+  \caption{VIF/GVIF das covariáveis do modelo de fibrose.}
+\end{figure}
+
+\subsection{Modelo de DHEM}
+
+O modelo final de DHEM também apresentou ajuste adequado: Hosmer--Lemeshow com
+$X^2 = 2{,}32$ (valor-p = 0,509), AUC = 0,76 (IC 95\%: 0,65--0,88), VIF máximo
+de 1,1 e maior distância de Cook de 0,107, sem observações influentes
+problemáticas. Assim como no modelo de fibrose, os resíduos não revelaram
+padrões sistemáticos relevantes, e a discriminação foi ligeiramente superior.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_calibracao_dhem.pdf}
+  \caption{Calibração do modelo de DHEM (probabilidades observadas vs.
+           preditas).}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_roc_dhem.pdf}
+  \caption{Curva ROC do modelo de DHEM.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_residuos_dhem.pdf}
+  \caption{Resíduos de Pearson e Deviance do modelo de DHEM.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_cook_dhem.pdf}
+  \caption{Distância de Cook do modelo de DHEM.}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.8\textwidth]{outputs/figura_vif_dhem.pdf}
+  \caption{VIF/GVIF das covariáveis do modelo de DHEM.}
+\end{figure}
+
+\subsection{Modelos Lineares de Conversão de MMEA (Concordância)}
+\label{sec:apendice_concordancia}
+
+Para cada um dos seis pares de ajustes contínuos de MMEA foram ajustados o
+modelo sem intercepto $Y = bX$ e o modelo irrestrito $Y = a + bX$, extraindo-se
+as métricas consolidadas na Tabela~\ref{tab:diagnosticos_concordancia}:
+coeficiente $b$ com erro padrão (EP), $R^2$ não centrado e RMSE dos resíduos,
+teste de Shapiro--Wilk sobre os resíduos de $Y = bX$, teste de significância do
+intercepto no modelo irrestrito ($H_0: a = 0$) e máxima distância de Cook.
+
+\begin{table}[H]
+  \centering
+  \caption{Diagnósticos dos modelos lineares sem intercepto ($Y = bX$) para os
+           seis pares de ajustes de MMEA: coeficiente $b$ (EP), $R^2$ não
+           centrado, RMSE, teste de Shapiro--Wilk dos resíduos, teste do
+           intercepto no modelo irrestrito ($a \neq 0$) e avaliação do ajuste.}
+  \label{tab:diagnosticos_concordancia}
+  \input{outputs/tabela_diagnosticos_concordancia.tex}
+\end{table}
+
+Em todos os pares, o teste do intercepto no modelo irrestrito rejeitou a
+hipótese $a = 0$ ($p < 0{,}001$; no par Baumgartner vs FNIH, $p = 0{,}002$),
+indicando que a reta que melhor representa a relação contínua entre os métodos
+não passa pela origem e que o modelo sem intercepto $Y = bX$ é
+estruturalmente inadequado como equação de conversão entre escalas não
+comensuráveis. O teste de Shapiro--Wilk rejeitou a normalidade dos resíduos em
+quatro dos seis pares (exceções: Newman vs Baumgartner e Baumgartner vs
+MMEA/peso), e o painel de resíduos vs.~valores ajustados
+(Figura~\ref{fig:residuos_concordancia}) evidencia dispersão residual
+crescente com o ajuste (heterocedasticidade) e tendência sistemática da média
+residual, confirmando a violação severa dos pressupostos. As violações de
+pressupostos indicam que o coeficiente $\hat{b}$ não constitui um fator de
+conversão matemática válido entre os métodos, devendo a avaliação de
+concordância restringir-se às classificações dicotômicas (coeficientes
+Kappa), como discutido na Seção~\ref{sec:obj2}.
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth]{outputs/figura_residuos_concordancia.pdf}
+  \caption{Resíduos vs.~valores ajustados dos modelos sem intercepto $Y = bX$
+           para os seis pares de ajustes de MMEA (linha vermelha: suavização
+           LOESS).}
+  \label{fig:residuos_concordancia}
+\end{figure}
+
+\end{document}

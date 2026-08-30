@@ -1,0 +1,29 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store
+Rplots.pdf
+
+# Artefatos de compilação do LaTeX
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+
+# Documentos internos de trabalho (memória de sessão)
+CONTEXTO.md
+PLANO.md
+PENDENCIAS.md
+PENDENCIAS.pdf
+REVISOES.md
+
+# Material da disciplina
+Prática_Estatística_III___Projeto_I___Proposta_Metodológica.pdf
+
+# Materiais de terceiros (da dona dos dados)
+APRESENTAÇÃO BIOESTATÍSTICA.pdf
+
+# Dados de pacientes (sensíveis — não versionar)
+base.xlsx
