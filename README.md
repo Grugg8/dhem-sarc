@@ -1,4 +1,4 @@
-# DHEM e Sarcopenia — Projeto I (Consultoria Estatística)
+# Associação entre DHEM e Sarcopenia — Projeto I
 
 Projeto da disciplina **GET00109 — Prática Estatística III** (2026.2):
 consultoria estatística para o projeto *Disfunções Endócrinas em Pacientes com
