@@ -1,27 +1,21 @@
 \documentclass[11pt,a4paper]{article}
 
-% --- PACOTES ESSENCIAIS ---
+% Pacotes usados pelo relatório e pelas tabelas geradas pelo R.
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage[portuguese]{babel}
 \usepackage{geometry}
 \geometry{a4paper, top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm}
 
-% --- PACOTES PARA GRÁFICOS E TABELAS (kableExtra e imagens) ---
 \usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{longtable}
 \usepackage{array}
-\usepackage{multirow}
 \usepackage{float}
 \usepackage{colortbl}
 \usepackage{xcolor}
 \usepackage{textcomp}
-\usepackage{threeparttable}
-\usepackage[normalem]{ulem}
-\usepackage{makecell}
 
-% --- TIPOGRAFIA E FORMATAÇÃO ---
 \usepackage{mathpazo}
 \usepackage{setspace}
 \usepackage{indentfirst}
@@ -33,20 +27,15 @@
 }
 \emergencystretch=3em
 
-% Compatibilidade com longtable v4.24 (evita cola com retração infinita
-% durante a divisão de tabelas entre páginas). Falhas não interrompem a compilação.
+% Evita cola entre blocos de rodapé quando uma longtable é dividida entre páginas.
 \makeatletter
 \patchcmd{\LT@output}
 {\copy\LT@foot\vss}
 {\copy\LT@foot\vskip 0pt plus 1fil minus \maxdimen}
-{\typeout{Longtable patch 1 ok}}{\typeout{Longtable patch 1 falhou}}
-\patchcmd{\LT@output}
-{\copy\LT@foot\vss}
-{\copy\LT@foot\vskip 0pt plus 1fil minus \maxdimen}
-{\typeout{Longtable patch 2 ok}}{\typeout{Longtable patch 2 falhou}}
+{}{}
 \makeatother
 
-% --- MACROS DINÂMICAS GERADAS PELO R (outputs/macros.tex) ---
+% Macros dinâmicas geradas pelo R.
 \input{outputs/macros.tex}
 \input{outputs/macros_analises.tex}
 
@@ -59,8 +48,8 @@
 \begin{flushright}
   {\LARGE\bfseries Relatório Final}\\[0.4em]
   {\large Associação entre DHEM e Sarcopenia}\\[0.8em]
-  {\normalsize Consultor: Lucas Batista de Oliveira}\\
-  {\normalsize Requisitante: Jordanna de Paula Mendes Torres}\\
+  {\normalsize Consultor: \rule[-0.05cm]{3.2cm}{0.4pt}}\\
+  {\normalsize Requisitante: \rule[-0.05cm]{3.2cm}{0.4pt}}\\
   {\normalsize Data de atualização: \today}
 \end{flushright}
 
@@ -102,17 +91,20 @@ combinado ao handgrip) e \PercSarcVel{} (velocidade de marcha $< 0{,}8$ m/s).
 \subsection{Contexto clínico}
 
 A DHEM é uma das causas mais frequentes de doença hepática crônica e está
-associada à obesidade, diabetes mellitus tipo 2 e síndrome metabólica. Estudos
+associada à obesidade, diabetes mellitus tipo 2 e síndrome metabólica
+\cite{buzzetti2016,eslam2020,easl2024}. Estudos
 recentes apontam uma relação bidirecional entre a DHEM e a sarcopenia: a perda
 progressiva e generalizada de massa e força muscular esquelética pode agravar o
 acúmulo de gordura hepática, enquanto a doença hepática avançada contribui para
-a degradação muscular por vias metabólicas e inflamatórias compartilhadas.
+a degradação muscular por vias metabólicas e inflamatórias compartilhadas
+\cite{sarcopenia_masld2025}.
 
 Neste subprojeto, a sarcopenia é avaliada por múltiplos critérios — testes
 funcionais (SARC-F, SARC-F com circunferência da panturrilha, handgrip, elevação
 da cadeira e velocidade de marcha) e ajustes de massa magra apendicular (MMEA)
 pelos métodos de Newman, Baumgartner, FNIH e razão MMEA/peso — o que permite
-comparar a frequência de sarcopenia conforme a definição empregada.
+comparar a frequência de sarcopenia conforme a definição empregada
+\cite{sbgg2022}.
 
 \subsection{Objetivos}
 
@@ -169,7 +161,8 @@ DHEM/fibrose, complementada por gráficos adequados: histogramas com boxplot
 numéricas).
 
 Para o objetivo 1, as prevalências de baixa massa magra foram estimadas com
-intervalo de confiança (IC) de 95\% pelo método de Wilson. Para o objetivo 2, a
+intervalo de confiança (IC) de 95\% pelo intervalo score de Wilson com correção
+de continuidade. Para o objetivo 2, a
 concordância entre os quatro ajustes de MMEA foi avaliada dois a dois por:
 (i) teste de médias pareado (t pareado ou Wilcoxon, conforme a normalidade das
 diferenças); (ii) teste de correlação maior que zero (Pearson ou Spearman);
@@ -193,8 +186,8 @@ multicolinearidade via fator de inflação da variância (VIF/GVIF); análise de
 resíduos de Pearson e Deviance; e detecção de observações influentes pela
 distância de Cook. Para o objetivo 5, os três grupos foram comparados
 com ANOVA/Kruskal--Wallis (numéricas) e qui-quadrado/Fisher (categóricas).
-Todas as análises foram realizadas em R 4.6.1, com semente fixa para
-reprodutibilidade sempre que necessário.
+Todas as análises foram realizadas em R 4.6.1 \cite{r2026}; as figuras que usam
+jitter foram geradas com semente fixa para garantir a reprodutibilidade.
 
 % ==============================================================================
 \section{Resultados}
@@ -376,8 +369,9 @@ $-0{,}40$, respectivamente).
 % ==============================================================================
 
 A Tabela~\ref{tab:prevalencia_ic} e a Figura~\ref{fig:prevalencia} apresentam a
-frequência de baixa massa magra em cada critério, com IC de 95\% (método de
-Wilson). A prevalência variou de 7,3\% (Baumgartner) a 44,8\% (Newman):
+frequência de baixa massa magra em cada critério, com IC de 95\% (intervalo
+score de Wilson com correção de continuidade). A prevalência variou de 7,3\%
+(Baumgartner) a 44,8\% (Newman):
 \PercIMMABaixo{} para o critério bruto MMEA $< 15/20$ kg
 (IC 95\%: \ICIMMABaixoInf{}--\ICIMMABaixoSup{}), \PercIMMANewman{} para Newman
 (IC 95\%: \ICIMMANewmanInf{}--\ICIMMANewmanSup{}), \PercIMMABaumgartner{} para
@@ -397,7 +391,8 @@ critérios, e quanto mais estreito o intervalo, mais precisa a estimativa.
 \begin{table}[H]
   \centering
   \caption{Prevalência de baixa massa magra segundo os critérios de MMEA, com
-           intervalo de confiança de 95\% (método de Wilson).}
+           intervalo de confiança de 95\% (intervalo score de Wilson com
+           correção de continuidade).}
   \label{tab:prevalencia_ic}
   \input{outputs/tabela_prevalencia_IC.tex}
 
@@ -553,7 +548,7 @@ diferença não foi rejeitada para a quantidade de massa muscular: a massa magra
 total foi de 45,1 kg (DP = 9,0) nos pacientes com fibrose e 44,7 kg (DP = 9,4)
 nos sem fibrose ($p = 0{,}585$), e o ALM/MMEA foi de 19,8 kg (DP = 4,8) contra
 20,0 kg (DP = 5,4) ($p = 0{,}891$). Após controlar pelos confundidores clássicos
-(sexo, idade e IMC) em um modelo de regressão logística múltiplo, a fibrose
+(sexo, idade e IMC) em um modelo de regressão linear múltiplo, a fibrose
 permaneceu sem associação estatisticamente significativa com a massa magra
 total ($\beta \approx \BetaFibroseMMT{}$ kg; $p = \PBetaFibroseMMT{}$).
 
@@ -769,38 +764,36 @@ excluída das regressões; o tamanho amostral reduzido do grupo sem DHEM
 As conclusões e recomendações finais serão elaboradas em conjunto com a
 cliente.
 
-% ==============================================================================
-\section{Referências}
-% ==============================================================================
-
-\begin{enumerate}
-  \item Buzzetti E, Pinzani M, Tsochatzis EA. The multiple-hit pathogenesis of
+\clearpage
+\addcontentsline{toc}{section}{Referências}
+\begin{thebibliography}{9}
+  \bibitem{buzzetti2016} Buzzetti E, Pinzani M, Tsochatzis EA. The multiple-hit pathogenesis of
         non-alcoholic fatty liver disease (NAFLD). \textit{Metabolism}.
         2016;65(8):1038--1048.
-  \item Eslam M, Newsome PN, Sarin SK, et al. A new definition for
+  \bibitem{eslam2020} Eslam M, Newsome PN, Sarin SK, et al. A new definition for
         metabolic dysfunction-associated fatty liver disease: an international
         expert consensus statement. \textit{J Hepatol}. 2020;73(1):202--209.
-  \item Riazi K, Azhari H, Charette JH, et al. The prevalence and incidence of
+  \bibitem{riazi2022} Riazi K, Azhari H, Charette JH, et al. The prevalence and incidence of
         NAFLD worldwide: a systematic review and meta-analysis.
         \textit{J Hepatol}. 2022;77(5):1335--1347.
-  \item EASL--EASD--EASO. Clinical Practice Guidelines on the management of
+  \bibitem{easl2024} EASL--EASD--EASO. Clinical Practice Guidelines on the management of
         metabolic dysfunction-associated steatotic liver disease (MASLD).
         \textit{J Hepatol}. 2024.
-  \item American Diabetes Association. Standards of Care in Diabetes--2025.
+  \bibitem{ada2025} American Diabetes Association. Standards of Care in Diabetes--2025.
         \textit{Diabetes Care}. 2025;48(Suppl 1).
-  \item Sociedade Brasileira de Geriatria e Gerontologia (SBGG). \textit{Manual
+  \bibitem{sbgg2022} Sociedade Brasileira de Geriatria e Gerontologia (SBGG). \textit{Manual
         de Recomendações para Diagnóstico e Tratamento da Sarcopenia no
         Brasil}. 2022.
-  \item Sarcopenia and MASLD: novel insights and the future.
+  \bibitem{sarcopenia_masld2025} Sarcopenia and MASLD: novel insights and the future.
         \textit{Nat Rev Endocrinol}. 2025. doi:10.1038/s41574-025-01197-7.
-  \item R Core Team. \textit{R: A Language and Environment for Statistical
+  \bibitem{r2026} R Core Team. \textit{R: A Language and Environment for Statistical
         Computing}. Viena, Áustria: R Foundation for Statistical Computing;
         2026.
-\end{enumerate}
+\end{thebibliography}
 
-% ==============================================================================
-\section{Apêndice --- Diagnóstico dos Modelos de Regressão Logística}
-% ==============================================================================
+\clearpage
+\appendix
+\section{Diagnóstico dos modelos de regressão logística}
 
 Este apêndice reúne os procedimentos de diagnóstico aplicados aos modelos
 logísticos múltiplos finais dos objetivos 3 (fibrose) e 4 (DHEM). Para cada

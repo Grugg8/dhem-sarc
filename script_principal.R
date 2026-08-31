@@ -2,37 +2,24 @@
 # Prática Estatística III - Projeto I
 # Disfunções Endócrinas em Pacientes com DHEM (Sub-projeto: Sarcopenia)
 # ----------------------------------------------------------------------------
-# Objetivo: gerar os insumos das análises descritivas univariadas e bivariadas
-#   - tabelas LaTeX (numéricas, categóricas e cruzamento por DHEM/fibrose)
-#   - gráficos vetoriais (.pdf) univariados e bivariados
-#   - macros LaTeX dinâmicas (outputs/macros.tex)
-#
-# Uso: basta executar `Rscript script_principal.R` na raiz do projeto.
-# Os resultados são gravados na pasta `outputs/`.
+# Pipeline reprodutível para gerar tabelas, figuras e macros do relatório.
+# Execute `Rscript script_principal.R` na raiz do projeto.
 # ============================================================================
 
 # ---- 0. Configuração -------------------------------------------------------
 
 suppressPackageStartupMessages({
-  library(MASS) # carregado antes do tidyverse para não mascarar dplyr::select
   library(tidyverse)
   library(readxl)
   library(kableExtra)
   library(patchwork)
-  library(scales)
-  library(broom)
-  library(ResourceSelection) # Hosmer-Lemeshow (calibração)
-  library(car)              # VIF / GVIF (multicolinearidade)
-  library(pROC)             # ROC / AUC (discriminação)
 })
 
 dir_saida <- "outputs"
-dir.create(dir_saida, showWarnings = FALSE)
-set.seed(42) # reprodutibilidade (testes de Fisher por simulação, etc.)
+dir.create(dir_saida, showWarnings = FALSE, recursive = TRUE)
+set.seed(42) # reprodutibilidade das posições aleatórias do jitter
 
-# Device PDF (vetorial). Se o cairo estiver funcional, use "cairo_pdf" para
-# suporte Unicode completo; o device padrão substitui "≥" por ">=" nos rótulos.
-device_pdf <- "pdf"
+device_pdf <- if (capabilities("cairo")) grDevices::cairo_pdf else grDevices::pdf
 
 # Formatação de números no padrão brasileiro (vírgula decimal)
 fmt_num <- function(x, d = 1) {
@@ -40,10 +27,10 @@ fmt_num <- function(x, d = 1) {
 }
 
 fmt_pct <- function(x) {
-  fmt_num(x, 1)
+  fmt_num(x, 1) # percentuais com uma casa decimal
 }
 
-# p-valor formatado: "<0,001" para valores muito pequenos
+# p-valor formatado no padrão usado no relatório.
 fmt_p <- function(p) {
   ifelse(
     is.na(p),
@@ -52,9 +39,16 @@ fmt_p <- function(p) {
   )
 }
 
+# Valor-p de Shapiro-Wilk; NA indica que o teste não é aplicável.
 shapiro_p <- function(x) {
-  n <- sum(!is.na(x))
-  if (n >= 3) shapiro.test(x)$p.value else NA_real_
+  x <- x[is.finite(x)]
+  if (length(x) < 3L || length(x) > 5000L) return(NA_real_)
+  tryCatch(shapiro.test(x)$p.value, error = function(e) NA_real_)
+}
+
+normalidade_ok <- function(...) {
+  p <- vapply(list(...), shapiro_p, numeric(1))
+  all(!is.na(p) & p >= 0.05)
 }
 
 # Remove o ambiente "table" criado pelo kableExtra (o relatório adiciona
@@ -68,10 +62,9 @@ tex_sem_table_env <- function(x) {
   x
 }
 
-# Faz a nota de rodapé (linhas \multicolumn{N}{l}{\rule{0pt}{1em}...}) quebrar
-# dentro da largura da tabela: troca o alinhamento {l} por p{} e aplica
-# \raggedright, permitindo que o texto da legenda ocupe várias linhas.
-# Aceita tabelas com 3 ou 4 colunas (triagens e modelos).
+# Faz a nota de rodapé das tabelas quebrar dentro da largura da tabela: troca
+# o alinhamento {l} por p{} com \raggedright nas linhas \multicolumn. Aceita
+# tabelas com 3 ou 4 colunas (triagens e modelos).
 tex_quebra_nota <- function(x) {
   x <- gsub("\\multicolumn{3}{l}{\\rule{0pt}{1em}",
             "\\multicolumn{3}{p{0.82\\linewidth}}{\\rule{0pt}{1em}\\raggedright{}",
@@ -107,11 +100,43 @@ tex_safe <- function(x) {
   x
 }
 
+texto_figura <- function(x) {
+  x <- gsub("≥", ">=", x, fixed = TRUE)
+  x <- gsub("≤", "<=", x, fixed = TRUE)
+  x <- gsub("×", "x", x, fixed = TRUE)
+  x <- gsub("²", "^2", x, fixed = TRUE)
+  x <- gsub("−", "-", x, fixed = TRUE)
+  x <- gsub("–", "-", x, fixed = TRUE)
+  x <- gsub("—", "-", x, fixed = TRUE)
+  gsub("·", "*", x, fixed = TRUE)
+}
+
+# Agrupa linhas consecutivas de uma tabela kbl em blocos com rótulo.
+# `blocos` é uma lista nomeada (rótulo -> variáveis) e `pos_var` mapeia cada
+# variável às linhas que ela ocupa na tabela.
+empacotar_blocos <- function(kbl_obj, blocos, pos_var, bold = TRUE) {
+  reduce(names(blocos), function(kbl_parcial, rotulo) {
+    linhas <- unlist(pos_var[blocos[[rotulo]]])
+    pack_rows(
+      kbl_obj, group_label = tex_safe(rotulo),
+      start_row = min(linhas), end_row = max(linhas),
+      bold = bold, escape = FALSE
+    )
+  }, .init = kbl_obj)
+}
+
 # ---------------------------------------------------------------------------- #
 # ==== 1. LEITURA E LIMPEZA DOS DADOS ==========================================
 # ---------------------------------------------------------------------------- #
 
-base_raw <- read_excel("base.xlsx", sheet = "Planilha de Dados") %>%
+# ---- 1.1 Leitura e renomeação das colunas ------------------------------------
+
+arquivo_base <- "base.xlsx"
+if (!file.exists(arquivo_base)) {
+  stop("Arquivo 'base.xlsx' não encontrado na raiz do projeto.")
+}
+
+base_raw <- read_excel(arquivo_base, sheet = "Planilha de Dados") %>%
   filter(rowSums(!is.na(across(everything()))) > 0) # remove linhas totalmente vazias
 
 # Renomeia colunas para nomes curtos e sem caracteres especiais
@@ -152,6 +177,8 @@ base <- base_raw %>%
     IMMA_Ajustado    = `IMMA AJUSTADO`,
     IMMA_PESO        = `IMMA/Peso`
   )
+
+# ---- 1.2 Conversão dos códigos para fatores ----------------------------------
 
 # Auxiliar para fatores binários 0/1
 fator01 <- function(x, rotulos = c("Não", "Sim")) {
@@ -223,7 +250,8 @@ base <- base %>%
 # A coluna permanece no base com o nome original, pois foi removida do rename.
 base <- base %>% select(-`Obesidade Sarcopênica`)
 
-# Listas de variáveis
+# ---- 1.3 Listas de variáveis e rótulos de exibição ---------------------------
+
 numericas <- c(
   "Idade_Elast", "Gordura_Total", "Massa_Magra_Total", "ALM_IMMA",
   "IMMA_Ajustado", "Newman", "Baumgartner", "FNIH", "IMMA_PESO", "IMC"
@@ -343,7 +371,9 @@ rotulos_cor <- c(
 
 # ---- 2.1 Variáveis numéricas -------------------------------------------------
 
-tabela_numericas <- map_dfr(numericas, function(v) {
+# Linha-resumo de uma variável numérica: n, média (DP), mediana (Q1;Q3),
+# mínimo–máximo e valor-p do teste de Shapiro-Wilk de normalidade.
+resumo_numerico <- function(v) {
   x <- base[[v]]
   p <- shapiro_p(x)
   tibble(
@@ -360,7 +390,9 @@ tabela_numericas <- map_dfr(numericas, function(v) {
     p_num           = p,
     `valor-p (SW)`  = tex_safe(fmt_p(p))
   )
-})
+}
+
+tabela_numericas <- map_dfr(numericas, resumo_numerico)
 
 tabela_numericas %>%
   mutate(`valor-p (SW)` = cell_spec(`valor-p (SW)`, format = "latex",
@@ -453,13 +485,18 @@ tab_cat_kbl %>%
 grupos_nomes <- c("Geral", "Sem DHEM", "DHEM sem Fibrose", "DHEM com Fibrose")
 n_por_grupo <- c(nrow(base), as.integer(table(base$DHEM_Comb)))
 
-# Categóricas: n (%) por grupo, com percentuais sobre observados
-# (o cruzamento da Tabela 3 exclui "Fibrose" e "DHEM_Comb", conforme plano)
+# Subconjunto da base para um grupo ("Geral" = amostra completa)
+filtrar_grupo <- function(g) {
+  if (g == "Geral") base else filter(base, DHEM_Comb == g)
+}
+
+# Categóricas: n (%) por grupo, com percentuais sobre os dados observados.
+# "Fibrose" e "DHEM_Comb" ficam de fora: definem a própria estratificação.
 vars_cruzamento <- setdiff(categoricas, c("Fibrose", "DHEM_Comb"))
 
 df_cruz_cat <- map_dfr(vars_cruzamento, function(v) {
   map_dfr(grupos_nomes, function(g) {
-    dados <- if (g == "Geral") base else filter(base, DHEM_Comb == g)
+    dados <- filtrar_grupo(g)
     f <- dados[[v]]
     f <- f[!is.na(f)]
     tab <- table(f)
@@ -475,22 +512,28 @@ df_cruz_cat <- map_dfr(vars_cruzamento, function(v) {
     )
 })
 
+# Resumo de uma variável numérica: média (DP) e mediana (Q1;Q3)
+resumo_medidas <- function(x) {
+  c(
+    "Média (DP)"      = sprintf("%s (%s)", fmt_num(mean(x, na.rm = TRUE), 1),
+                                fmt_num(sd(x, na.rm = TRUE), 1)),
+    "Mediana (Q1;Q3)" = sprintf("%s (%s;%s)",
+                                fmt_num(median(x, na.rm = TRUE), 1),
+                                fmt_num(quantile(x, 0.25, na.rm = TRUE, names = FALSE), 1),
+                                fmt_num(quantile(x, 0.75, na.rm = TRUE, names = FALSE), 1))
+  )
+}
+
 # Numéricas: Média (DP) e Mediana (IQR) por grupo
 df_cruz_num <- map_dfr(numericas, function(v) {
   map_dfr(grupos_nomes, function(g) {
-    dados <- if (g == "Geral") base else filter(base, DHEM_Comb == g)
+    dados <- filtrar_grupo(g)
     x <- dados[[v]]
+    medidas <- resumo_medidas(x)
     tibble(
       grupo = g,
-      Metrica = c("Média (DP)", "Mediana (Q1;Q3)"),
-      Valor = c(
-        sprintf("%s (%s)", fmt_num(mean(x, na.rm = TRUE), 1),
-                fmt_num(sd(x, na.rm = TRUE), 1)),
-        sprintf("%s (%s;%s)",
-                fmt_num(median(x, na.rm = TRUE), 1),
-                fmt_num(quantile(x, 0.25, na.rm = TRUE, names = FALSE), 1),
-                fmt_num(quantile(x, 0.75, na.rm = TRUE, names = FALSE), 1))
-      )
+      Metrica = names(medidas),
+      Valor = unname(medidas)
     )
   }) %>%
     pivot_wider(id_cols = Metrica, names_from = grupo, values_from = Valor) %>%
@@ -545,34 +588,23 @@ blocos_cat <- list(
 )
 blocos_num <- list("Variáveis numéricas" = numericas)
 
-# Posições originais (no data.frame) de cada variável
+# Posições (nº da linha no data.frame) de cada variável
 pos_var <- split(seq_len(nrow(df_cruz)), df_cruz$var)
-inicio_original <- sapply(pos_var, min)
-fim_original    <- sapply(pos_var, max)
 
 # 1) Blocos de seção (rótulos maiores, aplicados primeiro)
-todos_blocos <- c(blocos_cat, blocos_num)
-for (rotulo_bloco in names(todos_blocos)) {
-  bloco <- todos_blocos[[rotulo_bloco]]
-  start <- min(inicio_original[bloco])
-  end   <- max(fim_original[bloco])
-  tab_cruz_kbl <- tab_cruz_kbl %>%
-    pack_rows(group_label = tex_safe(rotulo_bloco), start_row = start,
-              end_row = end, bold = TRUE, escape = FALSE)
-}
+tab_cruz_kbl <- empacotar_blocos(tab_cruz_kbl, c(blocos_cat, blocos_num), pos_var)
 
 # 2) Indentação por variável (rótulos menores, aninhados nos blocos)
 for (v in c(vars_cruzamento, numericas)) {
-  qtd <- linhas_cruz[[v]]
-  fim <- inicio_original[[v]] + qtd - 1
   rotulo <- if (v %in% names(rotulos_var)) {
     rotulos_var[[v]]
   } else {
     rotulos_cat_descr[[v]]
   }
+  fim <- min(pos_var[[v]]) + linhas_cruz[[v]] - 1
   tab_cruz_kbl <- tab_cruz_kbl %>%
     pack_rows(group_label = tex_safe(rotulo),
-              start_row = inicio_original[[v]], end_row = fim,
+              start_row = min(pos_var[[v]]), end_row = fim,
               indent = TRUE, escape = FALSE)
 }
 
@@ -598,42 +630,51 @@ perc_var <- function(v, nivel) {
   sum(x == nivel, na.rm = TRUE) / sum(!is.na(x)) * 100
 }
 
+# Define uma macro LaTeX \Nome{valor}, lida pelo relatório
+macro_tex <- function(nome, valor) {
+  sprintf("\\newcommand{\\%s}{%s}", nome, valor)
+}
+
+perc_tex <- function(v, nivel) {
+  paste0(fmt_pct(perc_var(v, nivel)), "\\%")
+}
+
 macros <- c(
-  sprintf("\\newcommand{\\NTotal}{%d}", nrow(base)),
-  sprintf("\\newcommand{\\NSemDHEM}{%d}", n_por_grupo[2]),
-  sprintf("\\newcommand{\\NDHEMSemFibrose}{%d}", n_por_grupo[3]),
-  sprintf("\\newcommand{\\NDHEMComFibrose}{%d}", n_por_grupo[4]),
-  sprintf("\\newcommand{\\MediaIdade}{%s}", fmt_num(mean(base$Idade_Elast), 1)),
-  sprintf("\\newcommand{\\MedianaIdade}{%s}", fmt_num(median(base$Idade_Elast), 0)),
-  sprintf("\\newcommand{\\MediaIMC}{%s}", fmt_num(mean(base$IMC), 1)),
-  sprintf("\\newcommand{\\DPIMC}{%s}", fmt_num(sd(base$IMC), 1)),
-  sprintf("\\newcommand{\\PercMulheres}{%s\\%%}", fmt_pct(perc_var("Sexo", "Feminino"))),
-  sprintf("\\newcommand{\\PercDHEM}{%s\\%%}", fmt_pct(perc_var("DHEM", "Sim"))),
-  sprintf("\\newcommand{\\PercFibrose}{%s\\%%}", fmt_pct(perc_var("Fibrose", "Sim"))),
-  sprintf("\\newcommand{\\PercObesidade}{%s\\%%}", fmt_pct(perc_var("Obesidade_IMC", "Sim"))),
-  sprintf("\\newcommand{\\PercDiabetes}{%s\\%%}", fmt_pct(perc_var("Diabetes", "Sim"))),
-  sprintf("\\newcommand{\\PercHipertensao}{%s\\%%}", fmt_pct(perc_var("Hipertensao", "Sim"))),
-  sprintf("\\newcommand{\\PercSarcSARCF}{%s\\%%}", fmt_pct(perc_var("Sarcopenia_SARCF", "Alterado"))),
-  sprintf("\\newcommand{\\PercSarcSARCFCC}{%s\\%%}", fmt_pct(perc_var("Sarcopenia_SARCF_CC", "Alterado"))),
-  sprintf("\\newcommand{\\PercSarcHandgrip}{%s\\%%}", fmt_pct(perc_var("Sarcopenia_Handgrip", "Alterado"))),
-  sprintf("\\newcommand{\\PercSarcElev}{%s\\%%}", fmt_pct(perc_var("Sarcopenia_Elev", "Alterado"))),
-  sprintf("\\newcommand{\\PercSarcVel}{%s\\%%}", fmt_pct(perc_var("Sarcopenia_Vel", "Alterado"))),
-  sprintf("\\newcommand{\\PercIMMABaixo}{%s\\%%}", fmt_pct(perc_var("IMMA_Baixo", "Reduzido"))),
-  sprintf("\\newcommand{\\PercIMMANewman}{%s\\%%}", fmt_pct(perc_var("IMMA_Newman", "Reduzido"))),
-  sprintf("\\newcommand{\\PercIMMABaumgartner}{%s\\%%}", fmt_pct(perc_var("IMMA_Baumgartner", "Reduzido"))),
-  sprintf("\\newcommand{\\PercIMMAFNIH}{%s\\%%}", fmt_pct(perc_var("IMMA_FNIH", "Reduzido"))),
-  sprintf("\\newcommand{\\PercIMMAPeso}{%s\\%%}", fmt_pct(perc_var("IMMA_PESO_Ind", "Reduzido"))),
-  sprintf("\\newcommand{\\PercSarcNewman}{%s\\%%}", fmt_pct(perc_var("SARC_Newman", "Sim"))),
-  sprintf("\\newcommand{\\PercSarcBaumgartner}{%s\\%%}", fmt_pct(perc_var("SARC_Baumgartner", "Sim"))),
-  sprintf("\\newcommand{\\PercSarcFNIH}{%s\\%%}", fmt_pct(perc_var("SARC_FNIH", "Sim")))
+  macro_tex("NTotal", nrow(base)),
+  macro_tex("NSemDHEM", n_por_grupo[2]),
+  macro_tex("NDHEMSemFibrose", n_por_grupo[3]),
+  macro_tex("NDHEMComFibrose", n_por_grupo[4]),
+  macro_tex("MediaIdade", fmt_num(mean(base$Idade_Elast), 1)),
+  macro_tex("MedianaIdade", fmt_num(median(base$Idade_Elast), 0)),
+  macro_tex("MediaIMC", fmt_num(mean(base$IMC), 1)),
+  macro_tex("DPIMC", fmt_num(sd(base$IMC), 1)),
+  macro_tex("PercMulheres", perc_tex("Sexo", "Feminino")),
+  macro_tex("PercDHEM", perc_tex("DHEM", "Sim")),
+  macro_tex("PercFibrose", perc_tex("Fibrose", "Sim")),
+  macro_tex("PercObesidade", perc_tex("Obesidade_IMC", "Sim")),
+  macro_tex("PercDiabetes", perc_tex("Diabetes", "Sim")),
+  macro_tex("PercHipertensao", perc_tex("Hipertensao", "Sim")),
+  macro_tex("PercSarcSARCF", perc_tex("Sarcopenia_SARCF", "Alterado")),
+  macro_tex("PercSarcSARCFCC", perc_tex("Sarcopenia_SARCF_CC", "Alterado")),
+  macro_tex("PercSarcHandgrip", perc_tex("Sarcopenia_Handgrip", "Alterado")),
+  macro_tex("PercSarcElev", perc_tex("Sarcopenia_Elev", "Alterado")),
+  macro_tex("PercSarcVel", perc_tex("Sarcopenia_Vel", "Alterado")),
+  macro_tex("PercIMMABaixo", perc_tex("IMMA_Baixo", "Reduzido")),
+  macro_tex("PercIMMANewman", perc_tex("IMMA_Newman", "Reduzido")),
+  macro_tex("PercIMMABaumgartner", perc_tex("IMMA_Baumgartner", "Reduzido")),
+  macro_tex("PercIMMAFNIH", perc_tex("IMMA_FNIH", "Reduzido")),
+  macro_tex("PercIMMAPeso", perc_tex("IMMA_PESO_Ind", "Reduzido")),
+  macro_tex("PercSarcNewman", perc_tex("SARC_Newman", "Sim")),
+  macro_tex("PercSarcBaumgartner", perc_tex("SARC_Baumgartner", "Sim")),
+  macro_tex("PercSarcFNIH", perc_tex("SARC_FNIH", "Sim"))
 )
 
 writeLines(macros, file.path(dir_saida, "macros.tex"))
 
-# ---------------------------------------------------------------------------- #
 # ==== 4. GRÁFICOS =============================================================
 # ---------------------------------------------------------------------------- #
 
+# Tema e paletas compartilhados por todos os gráficos
 tema <- theme_minimal(base_size = 11) +
   theme(
     panel.grid.minor = element_blank(),
@@ -648,7 +689,8 @@ paleta_grupos <- c("Sem DHEM" = "#AAB7B8",
 
 # ---- 4.1 Univariadas: histograma + boxplot (numéricas) -----------------------
 
-grafico_numerica <- function(v, legenda = TRUE) {
+# Histograma + boxplot de uma variável numérica (boxplot compacto no topo)
+grafico_numerica <- function(v) {
   dados <- base %>% drop_na(!!sym(v))
 
   p_box <- ggplot(dados, aes(x = !!sym(v))) +
@@ -660,7 +702,7 @@ grafico_numerica <- function(v, legenda = TRUE) {
 
   p_hist <- ggplot(dados, aes(x = !!sym(v))) +
     geom_histogram(fill = "#34495E", color = "white", bins = 15, alpha = 0.9) +
-    labs(title = rotulos_var[[v]], x = NULL, y = "Frequência") +
+    labs(title = texto_figura(rotulos_var[[v]]), x = NULL, y = "Frequência") +
     tema
 
   p_box / p_hist + plot_layout(heights = c(1, 4))
@@ -693,7 +735,7 @@ grafico_categorica <- function(v) {
     geom_col(fill = "#34495E", alpha = 0.9, width = 0.65) +
     geom_text(aes(label = rotulo), vjust = -0.5, size = 3, color = "#2C3E50") +
     scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
-    labs(title = rotulos_cat_descr[[v]], x = NULL, y = "Frequência absoluta") +
+    labs(title = texto_figura(rotulos_cat_descr[[v]]), x = NULL, y = "Frequência absoluta") +
     tema +
     theme(axis.text.x = element_text(angle = ang, hjust = if (ang > 0) 1 else 0.5,
                                      size = if (ang > 0) 7.5 else 8.5))
@@ -711,7 +753,7 @@ walk(categoricas, function(v) {
 
 painel_numericas <- wrap_plots(
   map(c("Idade_Elast", "IMC", "Gordura_Total", "Massa_Magra_Total"),
-      ~ grafico_numerica(.x, legenda = FALSE)),
+      grafico_numerica),
   ncol = 2
 ) & theme(plot.margin = margin(4, 6, 4, 6))
 ggsave(file.path(dir_saida, "painel_numericas_principais.pdf"),
@@ -728,77 +770,58 @@ ggsave(file.path(dir_saida, "painel_categoricas_principais.pdf"),
 # ---- 4.4 Bivariadas -----------------------------------------------------------
 
 # Cat x Cat: prevalência de sarcopenia (critérios funcionais) por grupo
+# Painel de barras: prevalência de sarcopenia por grupo DHEM/fibrose para um
+# conjunto de critérios. `nivel_positivo` é o nível que indica sarcopenia
+# ("Alterado" nos testes funcionais, "Sim" nos critérios de massa magra).
+grafico_prevalencia_sarcopenia <- function(criterios, nivel_positivo, arquivo,
+                                           altura) {
+  dados <- map_dfr(criterios, function(v) {
+    base %>%
+      filter(!is.na(DHEM_Comb), !is.na(!!sym(v))) %>%
+      count(DHEM_Comb, criterio = rotulos_curtos_fig[[v]],
+            positivo = !!sym(v) == nivel_positivo) %>%
+      group_by(DHEM_Comb, criterio) %>%
+      mutate(perc = n / sum(n) * 100) %>%
+      filter(positivo) %>%
+      ungroup()
+  })
+
+  p <- ggplot(dados, aes(x = DHEM_Comb, y = perc, fill = DHEM_Comb)) +
+    geom_col(width = 0.68, alpha = 0.9) +
+    geom_text(aes(label = sprintf("%s%%", fmt_pct(perc))),
+              vjust = -0.4, size = 2.7, color = "#2C3E50") +
+    facet_wrap(~ criterio, ncol = 3) +
+    scale_fill_manual(values = paleta_grupos) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
+    labs(x = NULL, y = "Prevalência de sarcopenia (%)", fill = NULL) +
+    tema +
+    theme(
+      axis.text.x = element_text(angle = 15, hjust = 1, size = 7),
+      axis.text.y = element_text(size = 7),
+      strip.text = element_text(size = 8, margin = margin(2, 2, 2, 2)),
+      legend.position = "bottom",
+      plot.margin = margin(6, 8, 6, 8)
+    )
+
+  ggsave(file.path(dir_saida, arquivo), p, device = device_pdf,
+         width = 18, height = altura, units = "cm")
+}
+
+# Testes funcionais (SARC-F, handgrip, elevação da cadeira, marcha)
 criterios_funcionais <- c(
   "Sarcopenia_SARCF", "Sarcopenia_SARCF_CC", "Sarcopenia_Handgrip",
   "Sarcopenia_Elev", "Sarcopenia_Vel"
 )
+grafico_prevalencia_sarcopenia(
+  criterios_funcionais, nivel_positivo = "Alterado",
+  arquivo = "cruzamento_sarcopenia_funcional_DHEMComb.pdf", altura = 11
+)
 
-dados_sarc_func <- map_dfr(criterios_funcionais, function(v) {
-  base %>%
-    filter(!is.na(DHEM_Comb), !is.na(!!sym(v))) %>%
-    count(DHEM_Comb, criterio = rotulos_curtos_fig[[v]],
-          alterado = !!sym(v) == "Alterado") %>%
-    group_by(DHEM_Comb, criterio) %>%
-    mutate(perc = n / sum(n) * 100) %>%
-    filter(alterado) %>%
-    ungroup()
-})
-
-p_sarc_func <- ggplot(dados_sarc_func,
-                      aes(x = DHEM_Comb, y = perc, fill = DHEM_Comb)) +
-  geom_col(width = 0.68, alpha = 0.9) +
-  geom_text(aes(label = sprintf("%s%%", fmt_pct(perc))),
-            vjust = -0.4, size = 2.7, color = "#2C3E50") +
-  facet_wrap(~ criterio, ncol = 3) +
-  scale_fill_manual(values = paleta_grupos) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
-  labs(x = NULL, y = "Prevalência de sarcopenia (%)", fill = NULL) +
-  tema +
-  theme(
-    axis.text.x = element_text(angle = 15, hjust = 1, size = 7),
-    axis.text.y = element_text(size = 7),
-    strip.text = element_text(size = 8, margin = margin(2, 2, 2, 2)),
-    legend.position = "bottom",
-    plot.margin = margin(6, 8, 6, 8)
-  )
-
-ggsave(file.path(dir_saida, "cruzamento_sarcopenia_funcional_DHEMComb.pdf"),
-       p_sarc_func, device = device_pdf, width = 18, height = 11, units = "cm")
-
-# Cat x Cat: critérios de massa magra (Newman, Baumgartner, FNIH)
-criterios_massa <- c("SARC_Newman", "SARC_Baumgartner", "SARC_FNIH")
-
-dados_sarc_massa <- map_dfr(criterios_massa, function(v) {
-  base %>%
-    filter(!is.na(DHEM_Comb), !is.na(!!sym(v))) %>%
-    count(DHEM_Comb, criterio = rotulos_curtos_fig[[v]],
-          sarc = !!sym(v) == "Sim") %>%
-    group_by(DHEM_Comb, criterio) %>%
-    mutate(perc = n / sum(n) * 100) %>%
-    filter(sarc) %>%
-    ungroup()
-})
-
-p_sarc_massa <- ggplot(dados_sarc_massa,
-                       aes(x = DHEM_Comb, y = perc, fill = DHEM_Comb)) +
-  geom_col(width = 0.68, alpha = 0.9) +
-  geom_text(aes(label = sprintf("%s%%", fmt_pct(perc))),
-            vjust = -0.4, size = 2.8, color = "#2C3E50") +
-  facet_wrap(~ criterio, ncol = 3) +
-  scale_fill_manual(values = paleta_grupos) +
-  scale_y_continuous(expand = expansion(mult = c(0, 0.16))) +
-  labs(x = NULL, y = "Prevalência de sarcopenia (%)", fill = NULL) +
-  tema +
-  theme(
-    axis.text.x = element_text(angle = 15, hjust = 1, size = 7),
-    axis.text.y = element_text(size = 7),
-    strip.text = element_text(size = 8, margin = margin(2, 2, 2, 2)),
-    legend.position = "bottom",
-    plot.margin = margin(6, 8, 6, 8)
-  )
-
-ggsave(file.path(dir_saida, "cruzamento_sarcopenia_massa_DHEMComb.pdf"),
-       p_sarc_massa, device = device_pdf, width = 18, height = 9, units = "cm")
+# Critérios de massa magra (Newman, Baumgartner, FNIH)
+grafico_prevalencia_sarcopenia(
+  c("SARC_Newman", "SARC_Baumgartner", "SARC_FNIH"), nivel_positivo = "Sim",
+  arquivo = "cruzamento_sarcopenia_massa_DHEMComb.pdf", altura = 9
+)
 
 # Cat x Cat: DHEM x handgrip (frequências absolutas)
 df_cc <- base %>%
@@ -832,7 +855,7 @@ grafico_box_grupo <- function(v) {
     geom_boxplot(alpha = 0.85, outlier.shape = NA, width = 0.55) +
     geom_jitter(width = 0.14, size = 1.1, alpha = 0.35, color = "#2C3E50") +
     scale_fill_manual(values = paleta_grupos) +
-    labs(x = NULL, y = rotulos_var[[v]], fill = NULL) +
+    labs(x = NULL, y = texto_figura(rotulos_var[[v]]), fill = NULL) +
     tema +
     theme(axis.text.x = element_text(angle = 15, hjust = 1, size = 7.5),
           legend.position = "none",
@@ -870,8 +893,8 @@ p_cor <- ggplot(df_cor, aes(var1, var2, fill = r)) +
   scale_fill_gradient2(low = "#2166AC", mid = "white", high = "#B2182B",
                        midpoint = 0, limits = c(-1, 1),
                        name = "Correlação\nde Pearson") +
-  scale_x_discrete(labels = rotulos_cor[numericas]) +
-  scale_y_discrete(labels = rotulos_cor[numericas]) +
+  scale_x_discrete(labels = texto_figura(rotulos_cor[numericas])) +
+  scale_y_discrete(labels = texto_figura(rotulos_cor[numericas])) +
   coord_fixed() +
   labs(x = NULL, y = NULL) +
   tema +
@@ -904,7 +927,7 @@ prevalencia <- map_dfr(criterios_prevalencia, function(v) {
   n_obs <- sum(!is.na(f))
   n_ev  <- sum(f == "Reduzido", na.rm = TRUE)
   p     <- n_ev / n_obs
-  ic    <- prop.test(n_ev, n_obs, conf.level = 0.95)$conf.int
+  ic    <- prop.test(n_ev, n_obs, conf.level = 0.95, correct = TRUE)$conf.int
   tibble(
     var        = v,
     rotulo     = rotulos_curtos_prevalencia[[v]],
@@ -944,7 +967,7 @@ p_prev <- ggplot(prevalencia, aes(x = reorder(rotulo, pct), y = pct)) +
                   color = "#2C3E50", size = 0.55, linewidth = 0.8) +
   geom_text(
     aes(x = reorder(rotulo, pct), y = ic_sup,
-        label = sprintf("%s%% (%s–%s)", fmt_pct(pct), fmt_pct(ic_inf),
+        label = sprintf("%s%% (%s-%s)", fmt_pct(pct), fmt_pct(ic_inf),
                         fmt_pct(ic_sup))),
     hjust = -0.08, size = 3, color = "#2C3E50"
   ) +
@@ -963,7 +986,9 @@ ggsave(file.path(dir_saida, "figura_prevalencia_IC.pdf"), p_prev,
 # ---------------------------------------------------------------------------- #
 
 kappa_cohen <- function(x, y) {
-  x <- factor(x); y <- factor(y)
+  ok <- complete.cases(x, y)
+  x <- factor(x[ok]); y <- factor(y[ok])
+  if (length(x) == 0L) return(NA_real_)
   niveis <- union(levels(x), levels(y))
   x <- factor(x, levels = niveis); y <- factor(y, levels = niveis)
   tab <- table(x, y)
@@ -973,7 +998,9 @@ kappa_cohen <- function(x, y) {
 }
 
 kappa_fleiss <- function(mat) {
+  mat <- mat[complete.cases(mat), , drop = FALSE]
   n <- nrow(mat); r <- ncol(mat)
+  if (n == 0L || r < 2L) return(NA_real_)
   nij <- cbind(rowSums(mat == 0), rowSums(mat == 1))
   P_i <- (rowSums(nij^2) - r) / (r * (r - 1))
   Pbar <- mean(P_i)
@@ -999,14 +1026,14 @@ conc_detalhes <- map(seq_len(ncol(pares_ajustes)), function(j) {
   p_sh <- shapiro_p(d)
   if (!is.na(p_sh) && p_sh >= 0.05) {
     tt <- t.test(y, x, paired = TRUE)
-    rot_teste <- "t pareado"; est_med <- tt$statistic; p_med <- tt$p.value
+    rot_teste <- "t pareado"; p_med <- tt$p.value
   } else {
     wt <- wilcox.test(y, x, paired = TRUE)
-    rot_teste <- "Wilcoxon"; est_med <- wt$statistic; p_med <- wt$p.value
+    rot_teste <- "Wilcoxon"; p_med <- wt$p.value
   }
 
   # 2) correlação > 0
-  if (shapiro_p(x) >= 0.05 && shapiro_p(y) >= 0.05) {
+  if (normalidade_ok(x, y)) {
     ct <- cor.test(x, y, method = "pearson", alternative = "greater")
     rot_cor <- "Pearson"; r_cor <- ct$estimate; p_cor <- ct$p.value
   } else {
@@ -1079,7 +1106,7 @@ mat_fleiss_dhem <- base_dhem_concord %>%
   mutate(across(everything(), ~ as.integer(.x == "Reduzido"))) %>%
   as.matrix()
 kappa_fleiss_dhem <- kappa_fleiss(mat_fleiss_dhem)
-n_dhem_concord <- nrow(base_dhem_concord)
+n_dhem_concord <- sum(complete.cases(mat_fleiss_dhem))
 
 cat(sprintf(
   "  [Concordância] subamostra com DHEM (n = %d): Kappa de Fleiss global = %s\n",
@@ -1096,7 +1123,7 @@ p_ba <- ggplot(dados_ba, aes(media, dif)) +
              linetype = "dotted", linewidth = 0.5) +
   geom_point(alpha = 0.5, size = 1.4, color = "#2C3E50") +
   facet_wrap(~ par, ncol = 2, scales = "free") +
-  labs(x = "Média dos dois métodos", y = "Diferença (B − A)") +
+  labs(x = "Média dos dois métodos", y = "Diferença (B - A)") +
   tema +
   theme(strip.text = element_text(size = 8, margin = margin(2, 2, 2, 2)),
         plot.margin = margin(6, 8, 6, 8))
@@ -1264,8 +1291,7 @@ teste_associacao <- function(resposta, v) {
   x <- dados[[v]]; y <- dados[[resposta]]
   if (is.numeric(x)) {
     g0 <- x[y == "Não"]; g1 <- x[y == "Sim"]
-    if (length(g0) >= 3 && length(g1) >= 3 &&
-        shapiro_p(g0) >= 0.05 && shapiro_p(g1) >= 0.05) {
+    if (normalidade_ok(g0, g1)) {
       tt <- t.test(g1, g0)
       tibble(teste = "t de Student", est = tt$statistic, p = tt$p.value)
     } else {
@@ -1316,7 +1342,7 @@ triagem_dados <- function(resposta) {
   })
 }
 
-triagem_tabela <- function(resposta, dados_tri, n0, n1, caption, label) {
+triagem_tabela <- function(dados_tri, n0, n1, caption, label) {
   df <- dados_tri %>%
     select(var, rotulo, linha, `Não`, `Sim`, teste, p)
 
@@ -1380,7 +1406,11 @@ triagem_tabela <- function(resposta, dados_tri, n0, n1, caption, label) {
     kable_styling(latex_options = c("striped", "hold_position", "repeat_header"),
                   font_size = 9) %>%
     footnote(
-      general = "$^{1}$ Teste $t$ de Student; $^{2}$ Teste de Mann--Whitney; $^{3}$ Teste Qui-quadrado; $^{4}$ Teste Exato de Fisher. * $p < 0{,}20$: variável selecionada para a modelagem.",
+      general = paste(
+        "$^{1}$ Teste $t$ de Student; $^{2}$ Teste de Mann--Whitney;",
+        "$^{3}$ Teste Qui-quadrado; $^{4}$ Teste Exato de Fisher.",
+        "* $p < 0{,}20$: variável selecionada para a modelagem."
+      ),
       general_title = "Nota: ", escape = FALSE
     )
 }
@@ -1396,7 +1426,6 @@ sel_fibrose_20 <- triagem_fibrose %>%
   pull(var)
 
 triagem_tabela(
-  resposta = "Fibrose",
   dados_tri = triagem_fibrose,
   n0 = n_fib0, n1 = n_fib1,
   caption = "Triagem de variáveis candidatas para o modelo de fibrose hepática.",
@@ -1418,7 +1447,6 @@ sel_dhem_20 <- triagem_dhem %>%
   pull(var)
 
 triagem_tabela(
-  resposta = "DHEM",
   dados_tri = triagem_dhem,
   n0 = n_dhem0, n1 = n_dhem1,
   caption = "Triagem de variáveis candidatas para o modelo de DHEM.",
@@ -1448,25 +1476,19 @@ ajustar_modelo_logistico <- function(resposta, selecionadas, tag) {
   # remove observações com qualquer NA nas variáveis selecionadas.
   dados <- dados %>% drop_na(all_of(selecionadas))
   m0 <- glm(f, data = dados, family = binomial)
-  m_final <- stepAIC(m0, direction = "both", trace = 0)
+  m_final <- MASS::stepAIC(m0, direction = "both", trace = 0)
   list(inicial = m0, final = m_final, dados = dados)
 }
 
-tabela_modelo_logistico <- function(modelo) {
-  tid <- broom::tidy(modelo, exponentiate = TRUE, conf.int = TRUE,
-                     conf.method = "wald")
-  varnames <- names(modelo$model)[-1]
-  varnames <- varnames[order(nchar(varnames), decreasing = TRUE)]
-
-  tid <- tid %>%
+# Monta a tabela LaTeX (Variável | OR | IC 95% | p-valor) a partir dos termos
+# tidy de um ou mais modelos logísticos:
+# - contínuas e dicotômicas: linha única ("Rótulo (Nível vs. Ref.)");
+# - politômicas: linha "Rótulo (Ref.: X)" em negrito + sublinhas indentadas;
+# - variáveis em `retidas` têm o p-valor em negrito (retidas no múltiplo).
+tabela_or <- function(tid_bruto, dados, retidas = character(0), nota = NULL) {
+  tid <- tid_bruto %>%
     filter(term != "(Intercept)") %>%
     mutate(
-      var_base = map_chr(term, function(t) {
-        for (v in varnames) {
-          if (t == v || startsWith(t, v)) return(v)
-        }
-        t
-      }),
       nivel = map2_chr(term, var_base, function(t, vb) {
         if (t == vb) NA_character_ else substring(t, nchar(vb) + 1)
       }),
@@ -1478,27 +1500,28 @@ tabela_modelo_logistico <- function(modelo) {
       rotulo_base = map_chr(var_base, function(vb) {
         if (vb %in% names(rotulos_var)) rotulos_var[[vb]] else rotulos_cat_grupo[[vb]]
       }) %>% tex_safe(),
-      OR     = fmt_num(estimate, 2),
+      OR       = fmt_num(estimate, 2),
       `IC 95%` = sprintf("%s–%s", fmt_num(conf.low, 2), fmt_num(conf.high, 2)),
-      `valor-p` = tex_safe(fmt_p(p.value))
+      valor_p  = tex_safe(fmt_p(p.value))
+    ) %>%
+    mutate(
+      `valor-p` = cell_spec(valor_p, format = "latex",
+                            bold = var_base %in% retidas, escape = FALSE)
     ) %>%
     select(var_base, nivel, rotulo, rotulo_base, OR, `IC 95%`, `valor-p`)
 
-  # Nº de níveis e categoria de referência de cada fator (contrastes de
-  # tratamento: 1º nível), para classificar dicotômicas vs. politômicas.
+  # Categoria de referência de cada fator (contrastes de tratamento: 1º nível),
+  # para classificar dicotômicas vs. politômicas.
   info <- map_dfr(unique(tid$var_base), function(v) {
-    x <- modelo$model[[v]]
-    tibble(var_base = v,
-           n_niveis = if (is.factor(x)) length(levels(x)) else 0L,
-           ref = if (is.factor(x)) tex_safe(levels(x)[1]) else NA_character_)
+    x <- dados[[v]]
+    tibble(
+      var_base = v,
+      n_niveis = if (is.factor(x)) length(levels(x)) else 0L,
+      ref      = if (is.factor(x)) tex_safe(levels(x)[1]) else NA_character_
+    )
   })
   tid <- tid %>% left_join(info, by = "var_base")
 
-  # Montagem das linhas:
-  # - variáveis contínuas: linha única;
-  # - dicotômicas (2 níveis): linha única "Rótulo (Nível vs. Ref.)";
-  # - politômicas (≥ 3 níveis): linha principal "Rótulo (Ref.: X)" em negrito
-  #   com células vazias e sublinhas indentadas com os níveis.
   linhas <- list()
   for (vb in unique(tid$var_base)) {
     bloco <- tid[tid$var_base == vb, ]
@@ -1508,44 +1531,44 @@ tabela_modelo_logistico <- function(modelo) {
                                bloco$rotulo_base[1], bloco$ref[1]),
         OR = "", `IC 95%` = "", `valor-p` = ""
       )
-      sub <- bloco %>%
+      linhas[[length(linhas) + 1]] <- bloco %>%
         mutate(rotulo_linha = sprintf("\\hspace{1em}%s", tex_safe(nivel))) %>%
         select(rotulo_linha, OR, `IC 95%`, `valor-p`)
-      linhas[[length(linhas) + 1]] <- sub
     } else if (bloco$n_niveis[1] == 2) {
-      dic <- bloco %>%
+      linhas[[length(linhas) + 1]] <- bloco %>%
         mutate(rotulo_linha = sprintf("%s (%s vs. %s)",
                                       rotulo_base, tex_safe(nivel), ref)) %>%
         select(rotulo_linha, OR, `IC 95%`, `valor-p`)
-      linhas[[length(linhas) + 1]] <- dic
     } else {
       linhas[[length(linhas) + 1]] <- bloco %>%
         select(rotulo_linha = rotulo, OR, `IC 95%`, `valor-p`)
     }
   }
-  df_montado <- bind_rows(linhas)
 
-  df_montado %>%
+  tab <- bind_rows(linhas) %>%
     kbl(
-      format   = "latex",
-      booktabs = TRUE,
-      escape   = FALSE,
-      linesep  = "",
-      align    = "lccc",
+      format    = "latex",
+      booktabs  = TRUE,
+      escape    = FALSE,
+      linesep   = "",
+      align     = "lccc",
       col.names = tex_safe(c("Variável", "OR", "IC 95%", "p-valor"))
     ) %>%
     column_spec(1, width = "6.5cm") %>%
     column_spec(2:4, width = "3.0cm") %>%
-    kable_styling(latex_options = c("striped", "hold_position")) %>%
+    kable_styling(latex_options = c("striped", "hold_position"))
+
+  if (!is.null(nota)) {
+    tab <- tab %>%
+      footnote(general = nota, general_title = "Nota: ", escape = FALSE)
+  }
+
+  tab %>%
     as.character() %>%
     tex_sem_table_env()
 }
 
-# ============================================================================ #
-# Modelos logísticos simples (Fase 3.2) e diagnósticos (Fase 5)               #
-# ============================================================================ #
-
-# Roda um glm binomial para CADA covariável selecionada isoladamente.
+# Roda um glm binomial para CADA variável selecionada, isoladamente.
 modelo_simples <- function(resposta, selecionadas, dados) {
   map_dfr(selecionadas, function(v) {
     dados_v <- dados %>% filter(!is.na(.data[[resposta]]), !is.na(.data[[v]]))
@@ -1558,94 +1581,35 @@ modelo_simples <- function(resposta, selecionadas, dados) {
   })
 }
 
-# Tabela dos modelos simples (estrutura da Tabela 7): Variável | OR | IC 95% | p-valor.
-# Destaca em negrito as covariáveis retidas no modelo múltiplo (stepwise/AIC).
-# Variáveis contínuas e dicotômicas ocupam linha única; fatores politômicos
-# (≥ 3 níveis) ganham linha principal com a categoria de referência e
-# sublinhas indentadas. `dados` é o data frame usado no ajuste (para obter
-# os níveis e a referência de cada fator).
-tabela_modelos_simples <- function(modelos_tidy, retidas, dados) {
-  tid <- modelos_tidy %>%
-    filter(term != "(Intercept)") %>%
-    mutate(
-      nivel = map2_chr(term, var_base, function(t, vb) {
-        if (t == vb) NA_character_ else substring(t, nchar(vb) + 1)
-      }),
-      rotulo = map2_chr(term, var_base, function(t, vb) {
-        rv <- if (vb %in% names(rotulos_var)) rotulos_var[[vb]] else rotulos_cat_grupo[[vb]]
-        if (t == vb) return(rv)
-        sprintf("%s: %s", rv, substring(t, nchar(vb) + 1))
-      }) %>% tex_safe(),
-      rotulo_base = map_chr(var_base, function(vb) {
-        if (vb %in% names(rotulos_var)) rotulos_var[[vb]] else rotulos_cat_grupo[[vb]]
-      }) %>% tex_safe(),
-      OR     = fmt_num(estimate, 2),
-      `IC 95%` = sprintf("%s–%s", fmt_num(conf.low, 2), fmt_num(conf.high, 2)),
-      valor_p = tex_safe(fmt_p(p.value))
-    ) %>%
-    mutate(`valor-p` = cell_spec(valor_p, format = "latex",
-                                 bold = var_base %in% retidas, escape = FALSE)) %>%
-    select(var_base, nivel, rotulo, rotulo_base, OR, `IC 95%`, `valor-p`)
-
-  # Nº de níveis e categoria de referência de cada fator (contrastes de
-  # tratamento: 1º nível), para classificar dicotômicas vs. politômicas.
-  info <- map_dfr(unique(tid$var_base), function(v) {
-    x <- dados[[v]]
-    tibble(var_base = v,
-           n_niveis = if (is.factor(x)) length(levels(x)) else 0L,
-           ref = if (is.factor(x)) tex_safe(levels(x)[1]) else NA_character_)
-  })
-  tid <- tid %>% left_join(info, by = "var_base")
-
-  # Montagem das linhas (mesma estrutura da tabela do modelo múltiplo):
-  # contínuas em linha única; dicotômicas "Rótulo (Nível vs. Ref.)";
-  # politômicas com linha principal em negrito e sublinhas indentadas.
-  linhas <- list()
-  for (vb in unique(tid$var_base)) {
-    bloco <- tid[tid$var_base == vb, ]
-    if (bloco$n_niveis[1] >= 3) {
-      linhas[[length(linhas) + 1]] <- tibble(
-        rotulo_linha = sprintf("\\textbf{%s (Ref.: %s)}",
-                               bloco$rotulo_base[1], bloco$ref[1]),
-        OR = "", `IC 95%` = "", `valor-p` = ""
-      )
-      sub <- bloco %>%
-        mutate(rotulo_linha = sprintf("\\hspace{1em}%s", tex_safe(nivel))) %>%
-        select(rotulo_linha, OR, `IC 95%`, `valor-p`)
-      linhas[[length(linhas) + 1]] <- sub
-    } else if (bloco$n_niveis[1] == 2) {
-      dic <- bloco %>%
-        mutate(rotulo_linha = sprintf("%s (%s vs. %s)",
-                                      rotulo_base, tex_safe(nivel), ref)) %>%
-        select(rotulo_linha, OR, `IC 95%`, `valor-p`)
-      linhas[[length(linhas) + 1]] <- dic
-    } else {
-      linhas[[length(linhas) + 1]] <- bloco %>%
-        select(rotulo_linha = rotulo, OR, `IC 95%`, `valor-p`)
-    }
-  }
-  df_montado <- bind_rows(linhas)
-
-  df_montado %>%
-    kbl(
-      format   = "latex",
-      booktabs = TRUE,
-      escape   = FALSE,
-      linesep  = "",
-      align    = "lccc",
-      col.names = tex_safe(c("Variável", "OR", "IC 95%", "p-valor"))
-    ) %>%
-    column_spec(1, width = "6.5cm") %>%
-    column_spec(2:4, width = "3.0cm") %>%
-    kable_styling(latex_options = c("striped", "hold_position")) %>%
-    footnote(
-      general = "Modelos logísticos simples para cada covariável selecionada na triagem (p < 0,20). Em negrito, as covariáveis retidas no modelo múltiplo por stepwise (critério AIC).",
-      general_title = "Nota: ", escape = FALSE
-    ) %>%
-    as.character() %>%
-    tex_sem_table_env()
+# OR e IC 95% de cada termo do modelo logístico múltiplo final
+tabela_modelo_logistico <- function(modelo) {
+  varnames <- names(modelo$model)[-1]
+  varnames <- varnames[order(nchar(varnames), decreasing = TRUE)]
+  tid <- broom::tidy(modelo, exponentiate = TRUE, conf.int = TRUE,
+                     conf.method = "wald") %>%
+    mutate(var_base = map_chr(term, function(t) {
+      for (v in varnames) {
+        if (t == v || startsWith(t, v)) return(v)
+      }
+      t
+    }))
+  tabela_or(tid, dados = modelo$model)
 }
 
+# Tabela dos modelos simples: destaca em negrito as covariáveis retidas no
+# modelo múltiplo (stepwise/AIC) e explica o critério de seleção em nota.
+tabela_modelos_simples <- function(modelos_tidy, retidas, dados) {
+  tabela_or(
+    modelos_tidy,
+    dados = dados,
+    retidas = retidas,
+    nota = paste(
+      "Modelos logísticos simples para cada covariável selecionada na triagem",
+      "(p < 0,20). Em negrito, as covariáveis retidas no modelo múltiplo por",
+      "stepwise (critério AIC)."
+    )
+  )
+}
 # Diagnósticos completos de um modelo logístico final: HL, resíduos, VIF,
 # distância de Cook e ROC/AUC. Retorna a linha-resumo e grava as figuras.
 diagnosticos_modelo <- function(modelo, resposta, tag, tag_nome) {
@@ -1704,10 +1668,11 @@ diagnosticos_modelo <- function(modelo, resposta, tag, tag_nome) {
   auc_lo <- auc_ci[1]; auc_hi <- auc_ci[3]
 
   # ---- Figuras ----
-  p_roc <- pROC::ggroc(roc_obj, legacy.axes = TRUE, size = 0.8, color = "#2C3E50") +
+  p_roc <- pROC::ggroc(roc_obj, legacy.axes = TRUE, linewidth = 0.8,
+                       color = "#2C3E50") +
     geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "#7F8C8D") +
-    labs(x = "1 − Especificidade", y = "Sensibilidade",
-         title = sprintf("Curva ROC — %s (AUC = %s; IC 95%%: %s–%s)",
+    labs(x = "1 - Especificidade", y = "Sensibilidade",
+         title = sprintf("Curva ROC - %s (AUC = %s; IC 95%%: %s-%s)",
                          tag_nome, fmt_num(auc, 2), fmt_num(auc_lo, 2), fmt_num(auc_hi, 2))) +
     coord_fixed() + tema
   ggsave(file.path(dir_saida, sprintf("figura_roc_%s.pdf", tag)), p_roc,
@@ -1763,7 +1728,7 @@ diagnosticos_modelo <- function(modelo, resposta, tag, tag_nome) {
       geom_hline(yintercept = 5, linetype = "dashed", color = "#C0392B") +
       geom_hline(yintercept = 10, linetype = "dotted", color = "#2980B9") +
       coord_flip() +
-      labs(x = NULL, y = "VIF (GVIF^{1/(2·Df)} para fatores)") + tema
+      labs(x = NULL, y = "VIF (GVIF^{1/(2*Df)} para fatores)") + tema
     ggsave(file.path(dir_saida, sprintf("figura_vif_%s.pdf", tag)), p_vif,
            device = device_pdf, width = 14, height = 9, units = "cm")
   }
@@ -1782,13 +1747,11 @@ diagnosticos_modelo <- function(modelo, resposta, tag, tag_nome) {
   )
 }
 
-# Objetivo 3: resposta = Fibrose (variáveis com p < 0,20 na triagem)
-sel_fibrose <- sel_fibrose_20
-
+# ---- 7.1 Objetivo 3: resposta = Fibrose -------------------------------------
 cat(sprintf("  [Fibrose] selecionadas (p < 0,20): %s\n",
-            paste(sel_fibrose, collapse = ", ")))
+            paste(sel_fibrose_20, collapse = ", ")))
 
-mod_fibrose <- ajustar_modelo_logistico("Fibrose", sel_fibrose, "Fibrose")
+mod_fibrose <- ajustar_modelo_logistico("Fibrose", sel_fibrose_20, "Fibrose")
 
 retidas_fibrose <- names(mod_fibrose$final$model)[-1]
 cat(sprintf("  [Fibrose] retidas no modelo múltiplo (stepwise): %s\n",
@@ -1821,13 +1784,11 @@ cat(sprintf(
   fmt_num(beta_fibrose_mmt, 2), fmt_p(p_beta_fibrose_mmt)
 ))
 
-# Objetivo 4: resposta = DHEM (variáveis com p < 0,20 na triagem)
-sel_dhem <- sel_dhem_20
-
+# ---- 7.2 Objetivo 4: resposta = DHEM ----------------------------------------
 cat(sprintf("  [DHEM] selecionadas (p < 0,20): %s\n",
-            paste(sel_dhem, collapse = ", ")))
+            paste(sel_dhem_20, collapse = ", ")))
 
-mod_dhem <- ajustar_modelo_logistico("DHEM", sel_dhem, "DHEM")
+mod_dhem <- ajustar_modelo_logistico("DHEM", sel_dhem_20, "DHEM")
 
 retidas_dhem <- names(mod_dhem$final$model)[-1]
 cat(sprintf("  [DHEM] retidas no modelo múltiplo (stepwise): %s\n",
@@ -1878,7 +1839,7 @@ testes_grupos <- map_dfr(candidatas_modelo, function(v) {
   dados <- base %>% filter(!is.na(DHEM_Comb), !is.na(.data[[v]]))
   x <- dados[[v]]; g <- dados$DHEM_Comb
   if (is.numeric(x)) {
-    if (shapiro_p(x) >= 0.05) {
+    if (normalidade_ok(x)) {
       a <- summary(aov(x ~ g))
       tibble(var = v, rotulo = tex_safe(rotulos_var[[v]]),
              Teste = "ANOVA",
@@ -1917,7 +1878,9 @@ testes_grupos <- map_dfr(candidatas_modelo, function(v) {
   arrange(var)
 
 blocos_grupos <- list(
-  "Características sociodemográficas" = c("Sexo", "Etnia", "Idade_Elast", "Atividade_Fisica", "Tabagismo"),
+  "Características sociodemográficas" = c(
+    "Sexo", "Etnia", "Idade_Elast", "Atividade_Fisica", "Tabagismo"
+  ),
   "Comorbidades" = c("Obesidade_IMC", "Sobrepeso", "Diabetes", "Hipertensao"),
   "Composição corporal e sarcopenia" = c(
     "IMC", "Gordura_Total", "Gordura_Total_Ind", "Massa_Magra_Total", "ALM_IMMA",
@@ -1952,19 +1915,16 @@ tab_grupos_kbl <- testes_grupos %>%
   column_spec(4, width = "2.0cm") %>%
   kable_styling(latex_options = c("striped", "repeat_header"), font_size = 9) %>%
   footnote(
-    general = "$^{1}$ Teste $t$ de Student; $^{2}$ Teste de Mann--Whitney; $^{3}$ Teste Qui-quadrado; $^{4}$ Teste Exato de Fisher; $^{5}$ ANOVA; $^{6}$ Kruskal--Wallis.",
+    general = paste(
+      "$^{1}$ Teste $t$ de Student; $^{2}$ Teste de Mann--Whitney;",
+      "$^{3}$ Teste Qui-quadrado; $^{4}$ Teste Exato de Fisher;",
+      "$^{5}$ ANOVA; $^{6}$ Teste Kruskal--Wallis."
+    ),
     general_title = "Nota: ", escape = FALSE
   )
 
 pos_grupos <- split(seq_len(nrow(testes_grupos)), testes_grupos$var)
-for (bloco in blocos_grupos) {
-  linhas <- unlist(pos_grupos[bloco])
-  tab_grupos_kbl <- tab_grupos_kbl %>%
-    pack_rows(group_label = tex_safe(names(blocos_grupos)[
-      vapply(blocos_grupos, function(b) identical(b, bloco), logical(1))
-    ]), start_row = min(linhas), end_row = max(linhas),
-    bold = TRUE, escape = FALSE)
-}
+tab_grupos_kbl <- empacotar_blocos(tab_grupos_kbl, blocos_grupos, pos_grupos)
 
 tab_grupos_kbl %>%
   as.character() %>%
@@ -1977,19 +1937,24 @@ tab_grupos_kbl %>%
 # Teste de Dunn (comparações pareadas pós Kruskal-Wallis), com correção de Holm
 dunn_test <- function(x, g) {
   g <- factor(g)
-  dados <- tibble(x = x, g = g) %>% drop_na()
+  dados <- tibble(x = x, g = g) %>% drop_na() %>% mutate(g = droplevels(g))
   rk <- rank(dados$x)
   N <- nrow(dados)
   grupos <- levels(dados$g)
+  if (length(grupos) < 2L) {
+    return(tibble(Comparação = character(), z = numeric(), p = numeric(),
+                  p_aj = numeric()))
+  }
   combos <- combn(length(grupos), 2)
-  tab_t <- table(dados$x)
-  T <- sum(tab_t^3 - tab_t)
+  # Correção para empates na variância dos postos (soma de t^3 - t)
+  tab_empates <- table(dados$x)
+  soma_empates <- sum(tab_empates^3 - tab_empates)
 
   map_dfr(seq_len(ncol(combos)), function(j) {
     i <- combos[1, j]; k <- combos[2, j]
     ni <- sum(dados$g == grupos[i]); nk <- sum(dados$g == grupos[k])
     Ri <- mean(rk[dados$g == grupos[i]]); Rk <- mean(rk[dados$g == grupos[k]])
-    v <- (N * (N + 1) / 12 - T / (12 * (N - 1))) * (1 / ni + 1 / nk)
+    v <- (N * (N + 1) / 12 - soma_empates / (12 * (N - 1))) * (1 / ni + 1 / nk)
     z <- (Ri - Rk) / sqrt(v)
     tibble(
       Comparação = sprintf("%s vs %s", grupos[i], grupos[k]),
@@ -2003,8 +1968,13 @@ dunn_test <- function(x, g) {
 # Fisher exato pareado (categóricas binárias), com correção de Holm
 pairwise_fisher_bin <- function(g, x) {
   g <- factor(g); x <- factor(x)
-  dados <- tibble(g = g, x = x) %>% drop_na()
+  dados <- tibble(g = g, x = x) %>% drop_na() %>%
+    mutate(g = droplevels(g), x = droplevels(x))
   grupos <- levels(dados$g)
+  if (length(grupos) < 2L) {
+    return(tibble(Comparação = character(), z = numeric(), p = numeric(),
+                  p_aj = numeric()))
+  }
   combos <- combn(length(grupos), 2)
 
   map_dfr(seq_len(ncol(combos)), function(j) {
